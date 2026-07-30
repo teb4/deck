@@ -1,0 +1,8 @@
+@APPLY
+@REPLACE 1-1
+SET name "Test Deck"
+@REPLACE 2-2
+SET version 1.0
+@INSERT 3
+TEST 4 NEW value 42
+@END

@@ -1,0 +1,13 @@
+$DRY_ALL aedf4293f28a1308
+$REPLACE 1-1
+#!/bin/bash
+# Edited by deck editor — safe with any special characters
+$END
+$REPLACE 61-61
+echo "All edits applied successfully via deck editor"
+$END
+$INSERT_HEAD
+# === Auto-generated header by deck editor ===
+# This file was edited using the deck editor.
+# No sed, no patch, no regex escaping needed.
+$END

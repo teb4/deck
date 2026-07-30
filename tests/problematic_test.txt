@@ -1,0 +1,61 @@
+#!/bin/bash
+# Тестовый файл, который практически невозможно корректно отредактировать через sed
+# из-за обилия спецсимволов, которые нужно экранировать
+
+# Проблемные конструкции для sed:
+# 1. Heredoc с маркером, который может конфликтовать
+cat << '$END'
+Это heredoc с маркером $END
+Здесь можно писать что угодно, включая:
+$VAR, @decorator, \backslash, 'quotes', "double quotes"
+И даже команды $(echo "это не выполнится в heredoc с кавычками")
+$END
+
+# 2. Регулярное выражение внутри скрипта (ad для sed)
+PATTERN='s/old/new/g'
+echo "$PATTERN" | sed -e "$PATTERN"
+
+# 3. Множество $ и backslash в одной строке
+COMPLEX_VAR="Value: $HOME/path\\to\\file with \$literal and ${USER}_suffix"
+
+# 4. Command substitution с вложенными кавычками
+RESULT=$(find . -name "*.py" -exec grep -l "def test_\$(echo 'nested')" {} \;)
+
+# 5. Декораторы Python внутри bash-скрипта (heredoc)
+cat << 'PYTHON_CODE'
+@decorator
+def function():
+    """Docstring with $dollar and @at symbols"""
+    pattern = r"regex with \/slashes/ and \$dollar"
+    return f"formatted {var} string"
+PYTHON_CODE
+
+# 6. Многострочная конструкция с awk
+awk '
+BEGIN { FS=","; OFS="\t" }
+/^[0-9]+$/ { print $1, $2 }
+END { print "Done with $END marker" }
+' data.csv
+
+# 7. Экранированные кавычки в строке
+ESCAPED="She said \"Hello \$USER\" and walked to C:\\Windows\\System32"
+
+# 8. Массив с спецсимволами
+ARRAY=("@decorator" '$variable' "path\\to\\file" 'regex/pattern')
+
+# 9. Условие с множественными проверками
+if [[ "$VAR" =~ ^[a-z]+$ ]] && [[ -f "/path/with spaces/file" ]]; then
+    echo "Matched with \$ in pattern"
+fi
+
+# 10. Функция с heredoc и $END на нулевой колонке
+generate_config() {
+    cat << $END
+[Section]
+key = $value
+path = C:\\Program Files\\App
+pattern = @something
+новая строка
+}
+
+echo "End of problematic file for sed"

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deck-editor"
+version = "0.1.0"
+description = "Transactional text editor for LLM agents"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.13"
+dependencies = [
+    "xxhash>=3.4.0",
+]
+
+[project.scripts]
+deck-editor = "deck_editor.__main__:main"
+deck-editor-mcp = "deck_editor.mcp_server:main"
+
+[project.optional-dependencies]
+mcp = [
+    "mcp>=1.0.0,<2.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["deck_editor*"]
+
+[tool.setuptools.package-data]
+deck_editor = ["config.yaml"]

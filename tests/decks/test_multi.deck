@@ -1,0 +1,9 @@
+@DRY 0675aa6738f6b87f
+@REPLACE 3
+новая строка 3
+@DELETE 7-8
+@INSERT 5
+вставленная строка
+@INSERT_HEAD
+заголовок файла
+@END

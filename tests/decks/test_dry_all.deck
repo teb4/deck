@@ -1,0 +1,4 @@
+@DRY_ALL
+@REPLACE 1-1
+SET name "Full Preview"
+@END

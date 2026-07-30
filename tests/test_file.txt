@@ -1,0 +1,12 @@
+conflict test
+def hello():
+    return "world"
+def hello():
+    return "world"
+# header
+SET name "Deck Test"
+SET version 2.0
+TEST 3 SET cost 99
+# footer
+TEST 4 NEW value 42
+# bottom

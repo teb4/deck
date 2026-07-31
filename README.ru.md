@@ -39,7 +39,7 @@
 
 ```bash
 # 1. Клонировать репозиторий
-git clone <repo-url>
+git clone https://github.com/teb4/deck.git
 cd deck
 
 # 2. Создать виртуальное окружение

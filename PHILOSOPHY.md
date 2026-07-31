@@ -24,7 +24,7 @@ Diffs (unified diff, udiff, `git apply`) fail because of line-number shifts. Cha
 
 In both cases, the outcome is the same: after several failed attempts, the model loses confidence in its “mental image” of the file and proposes a radical solution — rewrite everything. This is expensive (thousands of tokens), risky (the model may forget code that should not be touched), and turns a readable diff into mush.
 
-Deck solves both problems at once: addressing by line numbers removes the need for exact text matching (unlike `str_replace`), and the model specifies all addresses relative to a single source snapshot — it does not need to recalculate shifts (unlike diff headers). The model simply copies the numbers it sees in the `GET` output — and that is all.
+Deck solves both problems, but not by eliminating recalculation — by making it trivial. Addressing by line numbers removes the need for exact text matching (unlike `str_replace`). Operations inside one deck still execute sequentially, each against the result of the previous one, so addresses can shift within a multi-operation deck exactly as they would with manual sequential edits — but the model only ever tracks a single integer, not a two-sided diff hunk header. A model unsure of the exact shift can even sidestep the arithmetic entirely: instead of computing `DELETE 8-10`, it can emit `DELETE 8` three times in a row, since each deletion shifts the next line into position 8. The model copies the numbers it sees in the `GET` output and, where an edit changes the line count, follows the shift one step at a time — not the multi-hunk bookkeeping that unified diff demands.
 
 How the editor works
 
@@ -71,7 +71,7 @@ The commands are as simple as possible:
 - `@INSERT <N>` — insert text after line `N`.
 - `@INSERT_HEAD` — insert text at the very beginning of the file.
 
-Multiple operations in a deck are executed sequentially. The model specifies all addresses relative to the initial file state (the snapshot it received via `GET`). Recalculating shifts is the editor’s job, not the model’s.
+Multiple operations in a deck are executed sequentially: each one operates on the result of the previous one, exactly as if applied one at a time. This means addresses inside a multi-operation deck are relative to the file **as it stands after the preceding operations in the same deck**, not to the original `GET` snapshot — if an earlier operation adds or removes lines, every following address must account for that shift. It is deliberately simple arithmetic (one line number to track, not a two-sided diff header to keep in sync), and it can be sidestepped further: a model unsure of an exact shift can repeat a single-line operation instead of computing a range.
 
 Marker and SKIP
 
@@ -130,15 +130,15 @@ Deck is written in Python and runs as a standard MCP server.
 Three tools the model receives via MCP:
 
 - `deck_get(file, addr)` — read a numbered line range and get `REV`.
-- `deck_create(file, rev, content)` — create a new file or completely overwrite an existing one.
+- `deck_create(file, content, rev)` — create a new file or completely overwrite an existing one.
 - `deck_apply(file, deck)` — apply a deck of edits.
 
 CLI for working from the shell:
 
 ```bash
-deck get main.py 40-50
-deck create new_file.py < content.txt
-deck apply main.py < deck.txt
+deck-editor get main.py 40-50
+deck-editor create new_file.py < content.txt
+deck-editor apply main.py < deck.txt
 ```
 
 You may find it useful.

@@ -33,7 +33,7 @@ Requirements:
 Steps:
 ```bash
 # 1. Clone the repository
-git clone <repo-url>
+git clone https://github.com/teb4/deck.git
 cd deck
 
 # 2. Create a virtual environment
@@ -680,8 +680,8 @@ Minimal safe scenario:
 4. `get` → check the result
 
 ### Full specification
-The full specification of the deck language, architecture, and implementation details are in `[spec.md](spec.md)`.
-Additional documentation for LLM agents is in `[agents.md](agents.md)`.
+The full specification of the deck language, architecture, and implementation details are in [`spec.md`](spec.md).
+Additional documentation for LLM agents is in [`agents.md`](agents.md).
 
 ### Project structure
 ```text

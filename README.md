@@ -27,7 +27,7 @@ To control integrity and protect against version races, xxhash (`xxh64`) is used
 
 ## Installation
 Requirements:
-- Python 3.13+
+- Python 3.10+
 - A virtual environment is recommended
 
 Steps:
@@ -697,7 +697,6 @@ deck/
   │   ├── apply.py             — DRY, DRY_ALL, APPLY
   │   └── utils.py             — xxhash, atomic_write, errors
   ├── tests/                   — tests
-  ├── doc/                     — additional documentation
   ├── spec.md                  — full specification
   ├── agents.md                — rules for LLM agents
   ├── pyproject.toml           — package configuration

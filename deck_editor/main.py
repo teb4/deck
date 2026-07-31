@@ -50,7 +50,11 @@ def main() -> None:
 
     elif args.command == "create":
         file_path = validate_path(args.file, workspace_root)
-        cmd_create(file_path, args.rev)
+        try:
+            cmd_create(file_path, args.rev)
+        except VersionConflictError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     elif args.command == "apply":
         file_path = validate_path(args.file, workspace_root)

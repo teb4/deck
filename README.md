@@ -50,25 +50,22 @@ pip install -e '.[mcp]'
 After installation, the following are available:
 | Command | Description |
 | --- | --- |
-| `deck` | CLI for manual use |
+| `deck-editor` | CLI for manual use |
 | `deck-editor-mcp` | MCP server for Qwen Code and other MCP clients |
-
-The canonical CLI name in the specification is `deck`.
-If the command is installed as `deck-editor` in your environment, use `deck-editor` instead of `deck`.
 
 ## CLI
 Main commands:
 ```bash
-deck get <file> <addr>
-deck create <file> [<rev>]
-deck apply <file> -
+deck-editor get <file> <addr>
+deck-editor create <file> [<rev>]
+deck-editor apply <file> -
 ```
 In the examples below, the deck is passed via stdin. The `-` symbol means reading the deck from standard input.
 
 ### Reading lines (GET)
 Command:
 ```bash
-deck get file.py 1-50
+deck-editor get file.py 1-50
 ```
 Response:
 ```text
@@ -97,7 +94,7 @@ REV: a3f5b7c9d1e2f405
 #### Creating a new file
 For a new file, `REV` must not be specified:
 ```bash
-printf 'line one\nline two\n' | deck create newfile.txt
+printf 'line one\nline two\n' | deck-editor create newfile.txt
 ```
 Response:
 ```text
@@ -109,7 +106,7 @@ REV: a3f5b7c9d1e2f406
 #### Overwriting an existing file
 For overwriting an existing file, `REV` is mandatory:
 ```bash
-printf 'new content\n' | deck create existing.txt a3f5b7c9d1e2f405
+printf 'new content\n' | deck-editor create existing.txt a3f5b7c9d1e2f405
 ```
 Response:
 ```text
@@ -126,7 +123,7 @@ Rules:
 
 Example error:
 ```bash
-printf 'text\n' | deck create newfile.txt a3f5b7c9d1e2f405
+printf 'text\n' | deck-editor create newfile.txt a3f5b7c9d1e2f405
 ```
 Expected error:
 ```text
@@ -146,7 +143,7 @@ A deck has three modes:
 
 #### `@DRY` example
 ```bash
-deck apply file.py - <<'EOF'
+deck-editor apply file.py - <<'EOF'
 @DRY a3f5b7c9d1e2f405
 @REPLACE 2
     1.1 Parameter and file processing
@@ -169,7 +166,7 @@ If the modified block is larger than 50 lines, the first 10 lines are shown, the
 
 #### `@DRY_ALL` example
 ```bash
-deck apply file.py - <<'EOF'
+deck-editor apply file.py - <<'EOF'
 @DRY_ALL a3f5b7c9d1e2f405
 @REPLACE 2
     1.1 Parameter and file processing
@@ -192,7 +189,7 @@ REV: a3f5b7c9d1e2f406 (would be new)
 
 #### `@APPLY` example
 ```bash
-deck apply file.py - <<'EOF'
+deck-editor apply file.py - <<'EOF'
 @APPLY a3f5b7c9d1e2f405
 @REPLACE 2
     1.1 Parameter and file processing
@@ -548,7 +545,7 @@ For another project, launch a separate MCP server with a different workspace:
 For CLI, simply run the command from the desired working directory:
 ```bash
 cd /home/user/projects/other_project
-deck get src/main.py 1-50
+deck-editor get src/main.py 1-50
 ```
 
 ### Recommended workflow for LLM agents
@@ -562,11 +559,11 @@ Recommended cycle:
 2. Structural search via `ast-grep` if you need to find a function, class, or other syntactic block entirely.
 3. Reading context via Deck:
    ```bash
-   deck get src/main.py 120-160
+   deck-editor get src/main.py 120-160
    ```
 4. Applying the deck:
    ```bash
-   deck apply src/main.py - <<'EOF'
+   deck-editor apply src/main.py - <<'EOF'
    @APPLY a3f5b7c9d1e2f405
    @REPLACE 125-130
    new code
@@ -618,7 +615,7 @@ The full table of errors and validation stages are described in `spec.md`.
 pip install -e .
 
 # Read file
-deck get src/main.py 1-20
+deck-editor get src/main.py 1-20
 ```
 Example response:
 ```text
@@ -630,7 +627,7 @@ REV: a3f5b7c9d1e2f405
 ```
 Preview changes:
 ```bash
-deck apply src/main.py - <<'EOF'
+deck-editor apply src/main.py - <<'EOF'
 @DRY a3f5b7c9d1e2f405
 @REPLACE 3
     result = process(config, strict=True)
@@ -651,7 +648,7 @@ Operations applied:
 ```
 Apply changes:
 ```bash
-deck apply src/main.py - <<'EOF'
+deck-editor apply src/main.py - <<'EOF'
 @APPLY a3f5b7c9d1e2f405
 @REPLACE 3
     result = process(config, strict=True)
@@ -667,7 +664,7 @@ Operations applied:
 ```
 Check the result:
 ```bash
-deck get src/main.py 1-20
+deck-editor get src/main.py 1-20
 ```
 
 #### For LLM agents (MCP)

@@ -57,20 +57,17 @@ pip install -e '.[mcp]'
 
 | Команда | Описание |
 |---|---|
-| `deck` | CLI для ручного использования |
+| `deck-editor` | CLI для ручного использования |
 | `deck-editor-mcp` | MCP-сервер для Qwen Code и других MCP-клиентов |
-
-> Каноническое имя CLI в спецификации — `deck`.
-> Если в вашем окружении команда установлена как `deck-editor`, используйте `deck-editor` вместо `deck`.
 
 ## CLI
 
 Основные команды:
 
 ```bash
-deck get <file> <addr>
-deck create <file> [<rev>]
-deck apply <file> -
+deck-editor get <file> <addr>
+deck-editor create <file> [<rev>]
+deck-editor apply <file> -
 ```
 
 В примерах ниже колода передаётся через stdin. Символ `-` означает чтение колоды из стандартного потока ввода.
@@ -80,7 +77,7 @@ deck apply <file> -
 Команда:
 
 ```bash
-deck get file.py 1-50
+deck-editor get file.py 1-50
 ```
 
 Ответ:
@@ -118,7 +115,7 @@ REV: a3f5b7c9d1e2f405
 Для нового файла `REV` указывать нельзя:
 
 ```bash
-printf 'строка одна\nстрока две\n' | deck create newfile.txt
+printf 'строка одна\nстрока две\n' | deck-editor create newfile.txt
 ```
 
 Ответ:
@@ -134,7 +131,7 @@ REV: a3f5b7c9d1e2f406
 Для перезаписи существующего файла `REV` обязателен:
 
 ```bash
-printf 'новое содержимое\n' | deck create existing.txt a3f5b7c9d1e2f405
+printf 'новое содержимое\n' | deck-editor create existing.txt a3f5b7c9d1e2f405
 ```
 
 Ответ:
@@ -155,7 +152,7 @@ REV: a3f5b7c9d1e2f406
 Пример ошибки:
 
 ```bash
-printf 'text\n' | deck create newfile.txt a3f5b7c9d1e2f405
+printf 'text\n' | deck-editor create newfile.txt a3f5b7c9d1e2f405
 ```
 
 Ожидаемая ошибка:
@@ -181,7 +178,7 @@ ERROR: <rev> must not be specified for new file
 ### Пример `@DRY`
 
 ```bash
-deck apply file.py - <<'EOF'
+deck-editor apply file.py - <<'EOF'
 @DRY a3f5b7c9d1e2f405
 @REPLACE 2
     1.1 Обработка параметров и файлов
@@ -208,7 +205,7 @@ Operations applied:
 ### Пример `@DRY_ALL`
 
 ```bash
-deck apply file.py - <<'EOF'
+deck-editor apply file.py - <<'EOF'
 @DRY_ALL a3f5b7c9d1e2f405
 @REPLACE 2
     1.1 Обработка параметров и файлов
@@ -236,7 +233,7 @@ REV: a3f5b7c9d1e2f406 (would be new)
 ### Пример `@APPLY`
 
 ```bash
-deck apply file.py - <<'EOF'
+deck-editor apply file.py - <<'EOF'
 @APPLY a3f5b7c9d1e2f405
 @REPLACE 2
     1.1 Обработка параметров и файлов
@@ -668,7 +665,7 @@ REV: a3f5b7c9d1e2f405
 
 ```bash
 cd /home/user/projects/other_project
-deck get src/main.py 1-50
+deck-editor get src/main.py 1-50
 ```
 
 ## Рекомендуемый workflow для LLM-агентов
@@ -688,13 +685,13 @@ rg -n "calculate_total" src/
 3. Чтение контекста через Deck:
 
 ```bash
-deck get src/main.py 120-160
+deck-editor get src/main.py 120-160
 ```
 
 4. Применение колоды:
 
 ```bash
-deck apply src/main.py - <<'EOF'
+deck-editor apply src/main.py - <<'EOF'
 @APPLY a3f5b7c9d1e2f405
 @REPLACE 125-130
 новый код
@@ -751,7 +748,7 @@ EOF
 pip install -e .
 
 # Прочитать файл
-deck get src/main.py 1-20
+deck-editor get src/main.py 1-20
 ```
 
 Пример ответа:
@@ -767,7 +764,7 @@ REV: a3f5b7c9d1e2f405
 Предпросмотр изменений:
 
 ```bash
-deck apply src/main.py - <<'EOF'
+deck-editor apply src/main.py - <<'EOF'
 @DRY a3f5b7c9d1e2f405
 @REPLACE 3
     result = process(config, strict=True)
@@ -792,7 +789,7 @@ Operations applied:
 Применить изменения:
 
 ```bash
-deck apply src/main.py - <<'EOF'
+deck-editor apply src/main.py - <<'EOF'
 @APPLY a3f5b7c9d1e2f405
 @REPLACE 3
     result = process(config, strict=True)
@@ -812,7 +809,7 @@ Operations applied:
 Проверить результат:
 
 ```bash
-deck get src/main.py 1-20
+deck-editor get src/main.py 1-20
 ```
 
 ### Для LLM-агентов (MCP)

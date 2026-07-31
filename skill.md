@@ -77,6 +77,8 @@ If your payload contains the marker character (`@` or `$`) at column zero (e.g.,
 
 **Default is `@APPLY`.** Do not use `@DRY` "just in case" for every edit — it doubles the number of decks you generate and wastes tokens.
 
+**The error-free path is `get` → `@DRY` → `@APPLY` → verification.** Deck itself only guarantees that the write is atomic and lands at the exact addresses you specified — it does not know or check whether the resulting content is valid for the file's language (e.g. it will happily write a Python file with broken indentation if that's what the payload contained). After a non-trivial `@APPLY`, verify the result with whatever tool fits the language (`python -m py_compile`, a linter, `go build`, the test suite, etc.) — that verification is your job with your existing tools, not something Deck does for you.
+
 ---
 
 ## Examples (Few-Shot)
@@ -92,15 +94,15 @@ def new_calculate():
 ```
 
 ### Example 2: Insertion and Deletion (APPLY — default)
-*Task: Delete line 5 and insert a new import after line 2. Routine edit.*
+*Task: Delete original line 5 and insert a new import after line 2. Routine edit.*
 ```text
 @APPLY a1b2c3d4e5f6
 @INSERT 2
 import sys
-@DELETE 5
+@DELETE 6
 @END
 ```
-*(Note: Operations are executed sequentially. After DELETE 5, line numbers shift, but within a single deck, you specify addresses based on the initial state of the file at the time of GET.)*
+*(Note: Operations execute sequentially, and each one works on the result of the previous one. `@INSERT 2` shifts every line after it down by one, so the original line 5 is now line 6 — that's why `@DELETE` addresses `6`, not `5`. Always recompute addresses for every operation after the first one in a multi-operation deck; never reuse the numbers from your original `GET`.)*
 
 ### Example 3: Large Edit with DRY Preview
 *Task: Replace a 40-line function. Edit is large — preview first.*

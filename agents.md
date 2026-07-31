@@ -35,7 +35,11 @@ For any code modification task, strictly adhere to this cycle:
 
    **Default is `@APPLY`.** Use `@DRY` only when you have a concrete reason to doubt the result.
 
-## 5. Error Handling
+   **The error-free path is: `get` → `@DRY` → `@APPLY` → verification (step 5 below).** Every step you skip removes one checkpoint where a mistake would otherwise be caught before it reaches disk or before it goes unnoticed. Skipping `@DRY` is a token/latency trade-off, not a correctness improvement — make it deliberately, not by default.
+
+5. **Verification (recommended):** Deck guarantees the write was atomic and applied at the addresses you specified — it does not know or check whether the resulting content is valid for the file's language. After a non-trivial `@APPLY`, verify the result yourself with whatever tool fits the language (e.g. `python -m py_compile`, `node --check`, `go build`, a linter, the project's test suite). This is a separate step performed with your existing tools, not a mode of Deck.
+
+## 6. Error Handling
 When you receive an error from Deck, the file on disk remains unchanged. Analyze the error:
 - `ERROR: version conflict` → Context is stale. Perform a new `deck_get`.
 - `ERROR: address out of file range` → You exceeded the file boundaries. Check `deck_get`.
@@ -43,6 +47,6 @@ When you receive an error from Deck, the file on disk remains unchanged. Analyze
 - `ERROR: terminator does not match deck marker` → You started the deck with `@` but ended it with `$END` (or vice versa).
 - `ERROR: operation after SKIP` → You placed an operation after a `SKIP` operation. `SKIP` must be the last operation before `@END`.
 
-## 6. Token Economy
+## 7. Token Economy
 - Do not read the entire file (`deck_get file 1-`) if the file is large. Read only the necessary range around the target.
 - Use `@DRY` instead of `@APPLY` **only** for large or uncertain edits (see Section 4). For routine edits, `@APPLY` directly is more token-efficient.

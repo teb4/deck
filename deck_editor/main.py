@@ -94,9 +94,4 @@ def apply_deck(file_path: str, deck, workspace_root: str) -> None:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    if result is None:
-        # DRY — diff уже выведен
-        pass
-    else:
-        # DRY_ALL или APPLY — выведен результат
-        pass
+    print(result)

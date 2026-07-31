@@ -111,7 +111,7 @@ def _format_diff(
         diff_lines = preview
 
     for dl in diff_lines:
-        result.append(dl)
+        result.append(dl.rstrip("\n"))
 
     # Сводка операций
     result.append("")

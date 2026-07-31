@@ -11,21 +11,32 @@ def validate_operations(operations: List[Operation], total_lines: int) -> None:
     """
     Валидирует все операции перед применением.
     Проверяет адреса, лимиты, конфликты.
+
+    Операции в колоде выполняются последовательно и сдвигают номера строк
+    (см. apply_operation / _apply_all), поэтому адрес каждой следующей
+    операции валидируется относительно количества строк файла ПОСЛЕ
+    применения всех предыдущих операций этой же колоды, а не относительно
+    исходного размера файла.
     """
     # Считаем total payload lines
     total_payload = sum(len(op.payload) for op in operations)
     if total_payload > max_deck_lines:
         raise DeckLimitError(f"deck size limit exceeded: {total_payload} > {max_deck_lines}")
 
-    # Валидируем каждую операцию
+    # Валидируем каждую операцию относительно текущего (сдвинутого) размера файла
+    current_lines = total_lines
     for op in operations:
-        _validate_single(op, total_lines)
+        current_lines = _validate_single(op, current_lines)
 
 
-def _validate_single(op: Operation, total_lines: int) -> None:
-    """Валидирует одну операцию."""
+def _validate_single(op: Operation, total_lines: int) -> int:
+    """
+    Валидирует одну операцию относительно текущего количества строк файла.
+    Возвращает количество строк файла ПОСЛЕ применения этой операции —
+    оно становится базой для валидации следующей операции в колоде.
+    """
     if op.name == "INSERT_HEAD":
-        return  # Нет адреса
+        return total_lines + len(op.payload)
 
     if op.address is None:
         raise DeckSyntaxError(f"{op.name} requires an address")
@@ -34,12 +45,8 @@ def _validate_single(op: Operation, total_lines: int) -> None:
     if op.name == "DELETE" and op.payload:
         raise DeckSyntaxError("unexpected payload after DELETE")
 
-
-
     start = op.address.start
     end = op.address.end
-
-
 
     # Валидация диапазона
     if end is not None and start > end:
@@ -49,16 +56,39 @@ def _validate_single(op: Operation, total_lines: int) -> None:
     if op.name == "INSERT" and end is not None:
         raise AddressError("INSERT requires single line address")
 
-    # Валидация out of range
+    # Валидация out of range (для INSERT адрес N — это существующая строка,
+    # после которой вставляется payload, поэтому она тоже обязана существовать)
     if start < 1:
         raise AddressError(f"address out of file range (lines: 1-{total_lines})")
-    if start > total_lines and op.name not in ("INSERT",):
+    if start > total_lines:
         raise AddressError(f"address out of file range (lines: 1-{total_lines})")
 
     # Для REPLACE/DELETE с диапазоном
     if op.name in ("REPLACE", "DELETE") and end is not None:
         if end > total_lines:
             raise AddressError(f"address out of file range (lines: 1-{total_lines})")
+
+    # Считаем, сколько строк займёт файл после этой операции
+    if op.name == "REPLACE":
+        removed = _range_length(op.address, total_lines)
+        return total_lines - removed + len(op.payload)
+    elif op.name == "DELETE":
+        removed = _range_length(op.address, total_lines)
+        return total_lines - removed
+    elif op.name == "INSERT":
+        return total_lines + len(op.payload)
+
+    return total_lines
+
+
+def _range_length(addr: Address, total_lines: int) -> int:
+    """Сколько строк покрывает адрес (для REPLACE/DELETE)."""
+    if addr.is_to_end:
+        return total_lines - addr.start + 1
+    if addr.end is None:
+        return 1
+    return addr.end - addr.start + 1
+
 
 
 def apply_operation(lines: List[str], op: Operation) -> List[str]:

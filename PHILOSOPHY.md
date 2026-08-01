@@ -1,4 +1,5 @@
-Here is the English translation:
+Eugeniy Tolmachev
+https://github.com/teb4
 
 Punch Cards for LLMs: an editor that lets a neural network edit code like in the 1960s
 

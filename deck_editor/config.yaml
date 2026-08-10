@@ -5,5 +5,5 @@ max_deck_lines: 5000
 max_create_lines: 50000
 diff_preview_lines: 10
 diff_preview_threshold: 50
-log_enabled: true
+log_enabled: false
 log_file: /home/teb/me/projects/deck/deck-editor.log

@@ -299,6 +299,8 @@ $END
 | `@DELETE <addr>` | `N`, `N-M`, `N-` | нет | запрещён | Удалить строки |
 | `@INSERT <N>` | только `N` | да | допускается | Вставить после строки `N` |
 | `@INSERT_HEAD` | нет | да | допускается | Вставить перед строкой 1 |
+| `@REPLACE_REGEX <addr>` | `N`, `N-M`, `N-` | да | допускается | Regex-замена по sed |
+| `@APPEND` | нет | да | запрещён | Добавить строки в конец |
 
 Важно:
 
@@ -307,7 +309,9 @@ $END
 - каждая следующая операция работает с результатом предыдущей;
 - номера строк могут сдвигаться после `REPLACE`, `INSERT`, `INSERT_HEAD` и `DELETE`;
 - `DELETE` строго не имеет payload;
-- `DELETE` не поддерживает `SKIP`.
+- `DELETE` не поддерживает `SKIP`;
+- `REPLACE_REGEX` использует синтаксис sed: `s/pattern/replacement/flags`;
+- `APPEND` не имеет адреса и не поддерживает `SKIP`.
 
 Пример ошибки:
 
@@ -323,6 +327,48 @@ $END
 ```text
 ERROR: unexpected payload after DELETE
 ```
+
+## Новые операции: `REPLACE_REGEX` и `APPEND`
+
+### `REPLACE_REGEX` — regex-замена
+
+Применяет sed-выражение к строкам в указанном диапазоне.
+
+```text
+# Заменить "foo" на "bar" в строках 4–50
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 4-50
+s/foo/bar/g
+@END
+
+# Замена с захватом групп
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 10-20
+s/(temp)/\1_celsius/g
+@END
+```
+
+Поддерживаемые разделители: `/`, `|`, `#`, `~`.
+Флаги: `g` (все совпадения), без флага — только первое совпадение.
+
+### `APPEND` — добавление строк в конец файла
+
+```text
+# Добавить JSON-запись в лог
+@APPLY a3f5b7c9d1e2f405
+@APPEND
+{"sensor": "temp", "value": 30.0, "unit": "C"}
+@END
+
+# Добавить несколько строк
+@APPLY a3f5b7c9d1e2f405
+@APPEND
+{"sensor": "humidity", "value": 65.0}
+{"sensor": "pressure", "value": 1013.0}
+@END
+```
+
+Без адреса, без `SKIP`.
 
 ## Адресация
 

@@ -245,6 +245,8 @@ Here the payload contains the line `@END`, but it is not a command because the d
 | `@DELETE <addr>` | `N`, `N-M`, `N-` | no | forbidden | Delete lines |
 | `@INSERT <N>` | only `N` | yes | allowed | Insert after line `N` |
 | `@INSERT_HEAD` | none | yes | allowed | Insert before line 1 |
+| `@REPLACE_REGEX <addr>` | `N`, `N-M`, `N-` | yes | allowed | Apply sed regex to lines |
+| `@APPEND` | none | yes | forbidden | Append lines to end of file |
 
 Important:
 - payload is always passed without line numbers;
@@ -252,7 +254,9 @@ Important:
 - each subsequent operation works with the result of the previous one;
 - line numbers may shift after `REPLACE`, `INSERT`, `INSERT_HEAD`, and `DELETE`;
 - `DELETE` strictly has no payload;
-- `DELETE` does not support `SKIP`.
+- `DELETE` does not support `SKIP`;
+- `REPLACE_REGEX` uses sed syntax: `s/pattern/replacement/flags`;
+- `APPEND` has no address and does not support `SKIP`.
 
 Example error:
 ```text
@@ -265,6 +269,48 @@ Expected error:
 ```text
 ERROR: unexpected payload after DELETE
 ```
+
+### New operations: `REPLACE_REGEX` and `APPEND`
+
+#### `REPLACE_REGEX` — regex substitution
+
+Applies a sed-style regex substitution to lines in a range.
+
+```text
+# Replace "foo" with "bar" in lines 4–50
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 4-50
+s/foo/bar/g
+@END
+
+# Replace with capture groups
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 10-20
+s/(temp)/\1_celsius/g
+@END
+```
+
+Supported delimiters: `/`, `|`, `#`, `~`.
+Flags: `g` (global), without flag — first match only.
+
+#### `APPEND` — append lines to end of file
+
+```text
+# Append a JSON log entry
+@APPLY a3f5b7c9d1e2f405
+@APPEND
+{"sensor": "temp", "value": 30.0, "unit": "C"}
+@END
+
+# Append multiple lines
+@APPLY a3f5b7c9d1e2f405
+@APPEND
+{"sensor": "humidity", "value": 65.0}
+{"sensor": "pressure", "value": 1013.0}
+@END
+```
+
+No address, no `SKIP`.
 
 ### Addressing
 | Format | Description |

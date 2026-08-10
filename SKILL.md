@@ -57,6 +57,8 @@ A deck consists of three parts: **Header**, **Body**, **Terminator**.
 - `DELETE <addr>`: Deletes lines. **Has NO payload!**
 - `INSERT <N>`: Inserts text **AFTER** line N. Address is only a single `N`.
 - `INSERT_HEAD`: Inserts text at the very beginning of the file. No address is specified.
+- `REPLACE_REGEX <addr>`: Applies a sed-style regex substitution to lines in range. Address: `N`, `N-M`, `N-`. Payload is a single sed expression: `s/pattern/replacement/flags`.
+- `APPEND`: Appends text to the end of the file. **No address.** Payload is one or more lines to append.
 
 ### SKIP Modifier ("Dirty Payload Last" Strategy)
 If your payload contains the marker character (`@` or `$`) at column zero (e.g., a Python decorator `@app.route` or a Bash variable `$VAR`), the parser might break.
@@ -173,5 +175,42 @@ text
 text with @decorator
 @INSERT 5
 more text
+@END
+```
+
+### Example 6: REPLACE_REGEX — Regex Substitution
+*Task: Replace all occurrences of "foo" with "bar" in lines 4–50.*
+```text
+@APPLY a1b2c3d4e5f6
+@REPLACE_REGEX 4-50
+s/foo/bar/g
+@END
+```
+
+### Example 7: REPLACE_REGEX — Capture Groups
+*Task: Replace "temp" with "temp_celsius" using capture groups.*
+```text
+@APPLY a1b2c3d4e5f6
+@REPLACE_REGEX 10-20
+s/(temp)/\1_celsius/g
+@END
+```
+
+### Example 8: APPEND — Add Lines to End of File
+*Task: Append a JSON log entry to the end of a file.*
+```text
+@APPLY a1b2c3d4e5f6
+@APPEND
+{"sensor": "temp", "value": 30.0, "unit": "C"}
+@END
+```
+
+### Example 9: APPEND — Multiple Lines
+*Task: Append multiple JSON objects.*
+```text
+@APPLY a1b2c3d4e5f6
+@APPEND
+{"sensor": "humidity", "value": 65.0, "unit": "%"}
+{"sensor": "pressure", "value": 1013.0, "unit": "hPa"}
 @END
 ```

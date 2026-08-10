@@ -1,0 +1,84 @@
+# Config file that breaks sed
+server.host = localhost
+server.port = 8080
+server.url = http://example.com:3000/api/v1
+
+# Regex patterns (sed uses these!)
+pattern1 = ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$
+pattern2 = \d{3}-\d{3}-\d{4}
+pattern3 = /usr/local/bin:/usr/bin:/bin
+
+# Special chars that break sed delimiters
+line_with_slash = path/to/file.txt
+line_with_pipe = cmd1 | cmd2 | cmd3
+line_with_backtick = `ls -la`
+line_with_tilde = ~/projects/deck
+line_with_dollar = $HOME/$USER/path
+line_with_ampersand = price is &discount
+line_with_hash = #comment in value
+line_with_exclaim = password=MyP@ss!123
+
+# Multiple delimiters in one line
+complex = s/old/new/g | grep -E "pattern" # replace & match
+
+# Empty lines and whitespace
+   
+
+# Unicode and special encoding
+emoji = 🚀🎉✨
+unicode = Привет мир 你好世界
+currency = €100 £50 ¥1000
+
+# JSON-like nested
+json = {"key": "value", "nested": {"a": 1, "b": [1, 2, 3]}}
+
+# SQL query
+sql = SELECT * FROM users WHERE name LIKE '%test%' AND status = 'active' ORDER BY created_at DESC
+
+# Shell script snippet
+shell = if [ -f "$file" ]; then echo "Found: $file"; fi
+
+# Markdown with special chars
+markdown = ## Header **bold** *italic* `code` [link](url)
+
+# Tab and space mix
+	tabbed	indent
+    spaces indent
+	mixed	tab and    space
+
+# Lines that look like sed commands
+sed_cmd = sed -i 's/old/new/g' file.txt
+awk_cmd = awk '{print $1, $2}' file
+grep_cmd = grep -r "pattern" /path/to/dir
+
+# Repeated patterns (hard to target with sed)
+repeat1 = same value
+repeat2 = same value
+repeat3 = same value
+repeat4 = same value
+repeat5 = same value
+
+# Very long line
+very_long = this is a very long line that contains many words and special characters like @#$%^&*()_+-=[]{}|;':\",./<>? and more text to make it really long so that sed might have issues with line length limits or buffer overflows in some implementations
+
+# Backslash hell
+backslash = C:\Users\Name\Documents\file.txt
+regex = \\d+\\.\\d+
+escaped = path\\to\\file
+
+# Null-like and control chars representation
+null_repr = \x00\x01\x02
+control = \t\n\r
+
+# Template strings
+template1 = Hello, {{name}}! Your total is ${{amount}}.
+template2 = Dear {{user.name}}, welcome to {{company}}!
+template3 = {name}:{age}:{email}
+
+# Diff-like content
+--- original.txt
++++ modified.txt
+@@ -1,5 +1,5 @@
+-old line
++new line
+ unchanged

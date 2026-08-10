@@ -1,0 +1,19 @@
+[
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"},
+    {"sensor": "temp", "value": 22.5, "unit": "C"}
+]

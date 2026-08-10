@@ -142,6 +142,20 @@ def _format_diff(
             )
         elif op.name == "INSERT_HEAD":
             result.append(f"- INSERT_HEAD ({len(op.payload)} lines inserted)")
+        elif op.name == "REPLACE_REGEX":
+            if op.address.is_to_end:
+                count = len(old_lines) - op.address.start + 1
+            elif op.address.end is None:
+                count = 1
+            else:
+                count = op.address.end - op.address.start + 1
+            result.append(
+                f"- REPLACE_REGEX lines {addr} ({count} lines regex-replaced)"
+            )
+        elif op.name == "APPEND":
+            result.append(
+                f"- APPEND ({len(op.payload)} lines appended)"
+            )
     return "\n".join(result)
 
 
@@ -197,5 +211,20 @@ def _format_apply(old_lines: List[str], new_lines: List[str], rev: str, operatio
             )
         elif op.name == "INSERT_HEAD":
             result.append(f"- INSERT_HEAD ({len(op.payload)} lines inserted)")
+        elif op.name == "REPLACE_REGEX":
+            addr = str(op.address)
+            if op.address.is_to_end:
+                count = len(old_lines) - op.address.start + 1
+            elif op.address.end is None:
+                count = 1
+            else:
+                count = op.address.end - op.address.start + 1
+            result.append(
+                f"- REPLACE_REGEX lines {addr} ({count} lines regex-replaced)"
+            )
+        elif op.name == "APPEND":
+            result.append(
+                f"- APPEND ({len(op.payload)} lines appended)"
+            )
 
     return "\n".join(result)

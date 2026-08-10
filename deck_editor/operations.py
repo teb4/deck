@@ -38,6 +38,12 @@ def _validate_single(op: Operation, total_lines: int) -> int:
     if op.name == "INSERT_HEAD":
         return total_lines + len(op.payload)
 
+    # APPEND не должен иметь address
+    if op.name == "APPEND":
+        if op.address is not None:
+            raise DeckSyntaxError("APPEND takes no address")
+        return total_lines + len(op.payload)
+
     if op.address is None:
         raise DeckSyntaxError(f"{op.name} requires an address")
 
@@ -63,8 +69,8 @@ def _validate_single(op: Operation, total_lines: int) -> int:
     if start > total_lines:
         raise AddressError(f"address out of file range (lines: 1-{total_lines})")
 
-    # Для REPLACE/DELETE с диапазоном
-    if op.name in ("REPLACE", "DELETE") and end is not None:
+    # Для REPLACE/DELETE/REPLACE_REGEX с диапазоном
+    if op.name in ("REPLACE", "DELETE", "REPLACE_REGEX") and end is not None:
         if end > total_lines:
             raise AddressError(f"address out of file range (lines: 1-{total_lines})")
 
@@ -75,6 +81,11 @@ def _validate_single(op: Operation, total_lines: int) -> int:
     elif op.name == "DELETE":
         removed = _range_length(op.address, total_lines)
         return total_lines - removed
+    elif op.name == "REPLACE_REGEX":
+        removed = _range_length(op.address, total_lines)
+        return total_lines - removed + len(op.payload)
+    elif op.name == "APPEND":
+        return total_lines + len(op.payload)
     elif op.name == "INSERT":
         return total_lines + len(op.payload)
 
@@ -104,6 +115,10 @@ def apply_operation(lines: List[str], op: Operation) -> List[str]:
         return _apply_insert(lines, op)
     elif op.name == "INSERT_HEAD":
         return _apply_insert_head(lines, op)
+    elif op.name == "REPLACE_REGEX":
+        return _apply_replace_regex(lines, op)
+    elif op.name == "APPEND":
+        return _apply_append(lines, op)
     else:
         raise DeckSyntaxError(f"unknown operation: {op.name}")
 
@@ -176,3 +191,89 @@ def _apply_insert_head(lines: List[str], op: Operation) -> List[str]:
     # Payload — добавляем \n к каждой строке
     payload = [line if line.endswith("\n") else line + "\n" for line in op.payload]
     return payload + lines
+
+
+def _apply_replace_regex(lines: List[str], op: Operation) -> List[str]:
+    """REPLACE_REGEX: применяет sed-выражение к строкам диапазона.
+
+    Payload — одна строка sed-выражения вида s/pattern/replacement/flags.
+    Применяется ко всем строкам в указанном диапазоне.
+    """
+    import re
+
+    addr = op.address
+    start_idx = addr.start - 1  # 0-индексация
+
+    # Определяем end_idx
+    if addr.is_to_end:
+        end_idx = len(lines)
+    elif addr.end is None:
+        end_idx = addr.start
+    else:
+        end_idx = addr.end
+
+    # Парсим sed-выражение: s/pattern/replacement/flags
+    sed_expr = op.payload[0] if op.payload else ""
+    pattern, replacement, flags = _parse_sed_expr(sed_expr)
+
+    # compiled_re — None если выражение некорректно
+    compiled_re = re.compile(pattern)
+    has_global = "g" in flags
+
+    # Строки до диапазона
+    before = lines[:start_idx]
+    # Строки после диапазона
+    after = lines[end_idx:]
+
+    # Применяем regex к строкам в диапазоне
+    replaced_lines = []
+    for i in range(start_idx, end_idx):
+        line = lines[i]
+        if has_global:
+            new_line = compiled_re.sub(replacement, line)
+        else:
+            # Только первое совпадение
+            new_line = compiled_re.sub(replacement, line, count=1)
+        replaced_lines.append(new_line)
+
+    return before + replaced_lines + after
+
+
+def _parse_sed_expr(sed_expr: str) -> Tuple[str, str, str]:
+    """Парсит sed-выражение s/pattern/replacement/flags.
+
+    Возвращает (pattern, replacement, flags).
+    Поддерживает разделители: /, |, #, ~
+    """
+    if len(sed_expr) < 2:
+        raise DeckSyntaxError(f"invalid sed expression: {sed_expr}")
+
+    # sed-выражение начинается с 's' за которым следует разделитель
+    if not sed_expr.startswith("s"):
+        raise DeckSyntaxError(f"invalid sed expression: must start with 's'")
+
+    rest = sed_expr[1:]  # убираем 's'
+    if not rest:
+        raise DeckSyntaxError(f"invalid sed expression: empty after 's'")
+
+    delimiter = rest[0]
+    if delimiter not in ("/", "|", "#", "~"):
+        raise DeckSyntaxError(f"invalid sed delimiter: {delimiter}")
+
+    # Разделяем по разделителю
+    parts = rest[1:].split(delimiter)
+    if len(parts) < 3:
+        raise DeckSyntaxError(f"invalid sed expression: need pattern, replacement, flags")
+
+    pattern = parts[0]
+    replacement = parts[1]
+    flags = parts[2] if len(parts) > 2 else ""
+
+    return pattern, replacement, flags
+
+
+def _apply_append(lines: List[str], op: Operation) -> List[str]:
+    """APPEND: добавляет payload в конец файла."""
+    # Payload — добавляем \n к каждой строке
+    payload = [line if line.endswith("\n") else line + "\n" for line in op.payload]
+    return lines + payload

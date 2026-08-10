@@ -11,7 +11,8 @@ from deck_editor.utils import DeckSyntaxError
 
 
 # Зарезервированные слова для операций
-OPERATION_NAMES = {"REPLACE", "DELETE", "INSERT", "INSERT_HEAD"}
+OPERATION_NAMES = {"REPLACE", "DELETE", "INSERT", "INSERT_HEAD",
+                   "REPLACE_REGEX", "APPEND"}
 HEADER_NAMES = {"DRY", "DRY_ALL", "APPLY"}
 TERMINATOR_NAME = "END"
 
@@ -158,6 +159,18 @@ def _validate_parsed_operations(operations: List[Operation]) -> None:
         # INSERT_HEAD не должен иметь address (приоритет 9)
         if op.name == "INSERT_HEAD" and op.address is not None:
             raise DeckSyntaxError("INSERT_HEAD takes no address")
+
+        # REPLACE_REGEX требует адрес (N, N-M, N-)
+        if op.name == "REPLACE_REGEX" and op.address is None:
+            raise DeckSyntaxError("REPLACE_REGEX requires an address")
+
+        # APPEND не должен иметь address
+        if op.name == "APPEND" and op.address is not None:
+            raise DeckSyntaxError("APPEND takes no address")
+
+        # APPEND не должен иметь SKIP
+        if op.name == "APPEND" and op.skip:
+            raise DeckSyntaxError("APPEND does not support SKIP")
 
         # Валидация диапазона: N-M где M < N (приоритет 11)
         if op.address is not None and op.address.end is not None:
@@ -312,6 +325,28 @@ def _parse_operation(
             op.payload.append(lines[idx])
             idx += 1
         # Если дошли до конца без терминатора — вернём len(lines)
+        return op, idx
+
+    # REPLACE_REGEX — payload (sed-выражение) до терминатора
+    if op_name == "REPLACE_REGEX":
+        idx = payload_start
+        while idx < len(lines) - 1:
+            next_line = lines[idx].strip()
+            if _is_command(next_line, marker) or _is_terminator(next_line, marker):
+                return op, idx
+            op.payload.append(lines[idx])
+            idx += 1
+        return op, idx
+
+    # APPEND — payload (строки для добавления) до терминатора
+    if op_name == "APPEND":
+        idx = payload_start
+        while idx < len(lines) - 1:
+            next_line = lines[idx].strip()
+            if _is_command(next_line, marker) or _is_terminator(next_line, marker):
+                return op, idx
+            op.payload.append(lines[idx])
+            idx += 1
         return op, idx
 
     # Для INSERT/INSERT_HEAD — payload до следующей команды, терминатора или конца тела

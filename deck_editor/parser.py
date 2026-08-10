@@ -172,6 +172,10 @@ def _validate_parsed_operations(operations: List[Operation]) -> None:
         if op.name == "APPEND" and op.skip:
             raise DeckSyntaxError("APPEND does not support SKIP")
 
+        # REPLACE_REGEX не должен иметь SKIP (payload всегда идёт до END)
+        if op.name == "REPLACE_REGEX" and op.skip:
+            raise DeckSyntaxError("REPLACE_REGEX does not support SKIP")
+
         # Валидация диапазона: N-M где M < N (приоритет 11)
         if op.address is not None and op.address.end is not None:
             if op.address.start > op.address.end:
@@ -307,6 +311,10 @@ def _parse_operation(
     # Fast-Fail: DELETE не должен иметь SKIP (spec §6, §11) — проверяем ДО payload
     if op_name == "DELETE" and skip:
         raise DeckSyntaxError("DELETE does not support SKIP")
+
+    # Fast-Fail: REPLACE_REGEX не должен иметь SKIP (payload всегда идёт до END)
+    if op_name == "REPLACE_REGEX" and skip:
+        raise DeckSyntaxError("REPLACE_REGEX does not support SKIP")
 
     # Fast-Fail: DELETE не должен иметь payload (spec §15, приоритет 5)
     if op_name == "DELETE" and len(parts) > 2:

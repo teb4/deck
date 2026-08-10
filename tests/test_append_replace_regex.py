@@ -339,15 +339,13 @@ s/foo/bar/g
             parse_deck(text)
 
     def test_parse_replace_regex_with_skip(self):
-        """REPLACE_REGEX с SKIP (payload содержит @ на нулевой колонке)."""
+        """REPLACE_REGEX с SKIP — ошибка (SKIP не поддерживается)."""
         text = """@APPLY abcdef1234567890
 @REPLACE_REGEX 1-10 SKIP
 s/@user/@admin/g
 @END"""
-        deck = parse_deck(text)
-        assert deck.operations[0].name == "REPLACE_REGEX"
-        assert deck.operations[0].skip is True
-        assert deck.operations[0].payload == ["s/@user/@admin/g"]
+        with raises(DeckSyntaxError):
+            parse_deck(text)
 
 
 class TestParseAppend:

@@ -66,6 +66,83 @@ class TestReplace:
         result = apply_operation(lines, op)
         assert result == ["строка 1\n", "новая 2\n"]
 
+    def test_replace_no_payload(self):
+        """REPLACE без payload — удаляет строку (M→0)."""
+        lines = ["строка 1\n", "строка 2\n", "строка 3\n"]
+        op = Operation(
+            name="REPLACE",
+            address=Address.parse("2"),
+            payload=[],
+        )
+        result = apply_operation(lines, op)
+        assert result == ["строка 1\n", "строка 3\n"]
+
+    def test_replace_payload_without_newline(self):
+        """REPLACE: payload без \n — добавляется автоматически."""
+        lines = ["строка 1\n", "строка 2\n"]
+        op = Operation(
+            name="REPLACE",
+            address=Address.parse("1"),
+            payload=["новая строка"],
+        )
+        result = apply_operation(lines, op)
+        assert result == ["новая строка\n", "строка 2\n"]
+
+    def test_replace_empty_file(self):
+        """REPLACE на пустом файле — ошибка валидации."""
+        lines: list[str] = []
+        op = Operation(
+            name="REPLACE",
+            address=Address.parse("1"),
+            payload=["новая\n"],
+        )
+        with pytest.raises(Exception):
+            validate_operations([op], 0)
+
+    def test_replace_to_end_on_short_file(self):
+        """REPLACE 1- на файле из 1 строки — заменяет всю строку."""
+        lines = ["старая\n"]
+        op = Operation(
+            name="REPLACE",
+            address=Address.parse("1-"),
+            payload=["новая\n"],
+        )
+        result = apply_operation(lines, op)
+        assert result == ["новая\n"]
+
+    def test_replace_to_end_all_lines(self):
+        """REPLACE 1- заменяет весь файл."""
+        lines = ["строка 1\n", "строка 2\n"]
+        op = Operation(
+            name="REPLACE",
+            address=Address.parse("1-"),
+            payload=["новая\n"],
+        )
+        result = apply_operation(lines, op)
+        assert result == ["новая\n"]
+
+    def test_replace_preserves_trailing_newline(self):
+        """REPLACE: если payload уже имеет \n — не дублируется."""
+        lines = ["строка 1\n"]
+        op = Operation(
+            name="REPLACE",
+            address=Address.parse("1"),
+            payload=["новая\n"],
+        )
+        result = apply_operation(lines, op)
+        assert result == ["новая\n"]
+
+    def test_replace_multiple_payload_lines(self):
+        """REPLACE: payload из нескольких строк."""
+        lines = ["старая\n"]
+        op = Operation(
+            name="REPLACE",
+            address=Address.parse("1"),
+            payload=["новая 1", "новая 2", "новая 3"],
+        )
+        result = apply_operation(lines, op)
+        assert result == ["новая 1\n", "новая 2\n", "новая 3\n"]
+
 
 class TestDelete:
     """Тесты DELETE."""

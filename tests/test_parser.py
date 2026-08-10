@@ -236,3 +236,12 @@ $END"""
         with raises(DeckSyntaxError) as exc_info:
             parse_deck(deck_text)
         assert exc_info.value.args[0] == "trailing lines after END"
+
+    def test_replace_regex_with_skip(self):
+        """REPLACE_REGEX с SKIP — ошибка (SKIP не поддерживается)."""
+        text = """@APPLY abcdef1234567890
+@REPLACE_REGEX 1-5 SKIP
+s/foo/bar/g
+@END"""
+        with raises(DeckSyntaxError):
+            parse_deck(text)

@@ -57,8 +57,8 @@ A deck consists of three parts: **Header**, **Body**, **Terminator**.
 - `DELETE <addr>`: Deletes lines. **Has NO payload!**
 - `INSERT <N>`: Inserts text **AFTER** line N. Address is only a single `N`.
 - `INSERT_HEAD`: Inserts text at the very beginning of the file. No address is specified.
-- `REPLACE_REGEX <addr>`: Applies a sed-style regex substitution to lines in range. Address: `N`, `N-M`, `N-`. Payload is a single sed expression: `s/pattern/replacement/flags`.
-- `APPEND`: Appends text to the end of the file. **No address.** Payload is one or more lines to append.
+- `REPLACE_REGEX <addr>`: Applies a sed-style regex substitution to lines in range. Address: `N`, `N-M`, `N-`. Payload is a single sed expression: `s/pattern/replacement/flags`. Supports `SKIP` (rarely needed — regex payload is a single line).
+- `APPEND`: Appends text to the end of the file. **No address. No `SKIP`.** Payload is one or more lines to append.
 
 ### SKIP Modifier ("Dirty Payload Last" Strategy)
 If your payload contains the marker character (`@` or `$`) at column zero (e.g., a Python decorator `@app.route` or a Bash variable `$VAR`), the parser might break.
@@ -78,13 +78,12 @@ If your payload contains the marker character (`@` or `$`) at column zero (e.g.,
 |-----------|--------|
 | Routine edit, ≤ 20 lines, obvious addressing | `@APPLY <rev>` |
 | Large edit, > 20 lines | `@DRY <rev>` → verify → `@APPLY <rev>` |
-| Uncertain addressing (you're not 100% sure about line numbers) | `@DRY <rev>` → verify → `@APPLY <rev>` |
-| Critical file (production config, migration, etc.) | `@DRY <rev>` → verify → `@APPLY <rev>` |
+| Uncertain addressing | `@DRY <rev>` → verify → `@APPLY <rev>` |
 | Creating a new file | `deck_create` (no deck needed) |
 
-**Default is `@APPLY`.** Do not use `@DRY` "just in case" for every edit — it doubles the number of decks you generate and wastes tokens.
+**When in doubt, use `@DRY`.** A wrong `@APPLY` can corrupt the file. A wrong `@DRY` just wastes one extra call.
 
-**The error-free path is `get` → `@DRY` → `@APPLY` → verification.** Deck itself only guarantees that the write is atomic and lands at the exact addresses you specified — it does not know or check whether the resulting content is valid for the file's language (e.g. it will happily write a Python file with broken indentation if that's what the payload contained). After a non-trivial `@APPLY`, verify the result with whatever tool fits the language (`python -m py_compile`, a linter, `go build`, the test suite, etc.) — that verification is your job with your existing tools, not something Deck does for you.
+Deck only guarantees atomic writes at the addresses you specified — it does not validate language syntax. After a non-trivial `@APPLY`, verify with your language tools (`python -m py_compile`, `go build`, tests, etc.).
 
 ---
 
@@ -212,5 +211,38 @@ s/(temp)/\1_celsius/g
 @APPEND
 {"sensor": "humidity", "value": 65.0, "unit": "%"}
 {"sensor": "pressure", "value": 1013.0, "unit": "hPa"}
+@END
+```
+
+### Example 10: REPLACE_REGEX — Different Delimiters
+*Task: Replace paths using `#` as delimiter (avoids escaping slashes).*
+```text
+@APPLY a1b2c3d4e5f6
+@REPLACE_REGEX 1-100
+s#/usr/local/bin#/opt/bin#g
+@END
+```
+
+### Example 11: APPEND — No Address, No SKIP
+*Task: Append a line. Note: `APPEND` takes no address and does not support `SKIP`.*
+```text
+@APPLY a1b2c3d4e5f6
+@APPEND
+new line at end
+@END
+```
+
+### Example 12: Errors — APPEND
+```text
+# ERROR: SKIP is not supported for APPEND
+@APPLY a1b2c3d4e5f6
+@APPEND SKIP
+some text
+@END
+
+# ERROR: APPEND with address
+@APPLY a1b2c3d4e5f6
+@APPEND 5
+text
 @END
 ```

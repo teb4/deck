@@ -8,20 +8,135 @@ description: Transactional editing skill using Deck MCP server for precise file 
 ## Tool Description
 Deck is a transactional editing language. You interact with it via an MCP server.
 
+## MCP Server Usage
+
+You interact with Deck through **three MCP tools**. Each tool is called as a separate MCP request.
+
+### Calling MCP Tools
+
+```json
+// Example: calling deck_get
+{
+  "name": "deck_get",
+  "arguments": {
+    "file": "src/main.py",
+    "addr": "10-20"
+  }
+}
+```
+
+```json
+// Example: calling deck_apply
+{
+  "name": "deck_apply",
+  "arguments": {
+    "file": "src/main.py",
+    "deck": "@APPLY a1b2c3d4e5f6\n@REPLACE 15\ndef new_func():\n    pass\n@END"
+  }
+}
+```
+
+```json
+// Example: calling deck_create (new file)
+{
+  "name": "deck_create",
+  "arguments": {
+    "file": "src/new_module.py",
+    "content": "def hello():\n    return 'world'\n"
+  }
+}
+```
+
+### Response Format
+
+**`deck_get` response:**
+```
+REV: a1b2c3d4e5f6
+000001:def foo():
+000002:    pass
+000003e
+000004:def bar():
+```
+
+**`deck_apply` response (success):**
+```
+APPLIED successfully
+REV: b2c3d4e5f6a1b2c3 (new)
+Operations applied:
+- REPLACE lines 15-15 (1 line replaced with 2 lines)
+```
+
+**`deck_apply` response (error):**
+```
+ERROR: version conflict — file changed
+```
+
+**`deck_create` response:**
+```
+REV: c3d4e5f6a1b2c3d4
+000001:def hello():
+000002:    return 'world'
+```
+
+## Complete Workflow
+
+### Standard Edit Cycle
+1. **Search** — find the target using `ripgrep` (`rg -n "pattern" file.py`) or `ast-grep`.
+2. **Read** — call `deck_get(file, "N-M")` to read the context. **Save the `<rev>` from the response.**
+3. **Plan** — decide which operation(s) you need. Check if payload contains `@` or `$` at column zero.
+4. **Apply** — call `deck_apply(file, deck_text)`.
+5. **Verify** — call `deck_get(file, "N-M")` again to confirm the changes.
+
+### Safe Edit Cycle (recommended for non-trivial edits)
+1. `deck_get` → save `<rev>`
+2. `deck_apply` with `@DRY <rev>` → check the diff
+3. `deck_apply` with `@APPLY <rev>` → apply changes
+4. `deck_get` → verify the result
+
+### Creating a New File
+1. Call `deck_create(file, content)` — **do NOT pass `<rev>`**.
+2. The response contains the new `<rev>` and the full numbered listing.
+
+### Overwriting an Existing File
+1. Call `deck_get(file, "1-")` → get the current `<rev>`.
+2. Call `deck_create(file, content, rev="<rev>")` — **pass the `<rev>`**.
+
+## Error Handling
+
+| Error | What to do |
+|-------|------------|
+| `ERROR: version conflict — file changed` | Context is stale. Call `deck_get` again, get new `<rev>`, rebuild the deck. |
+| `ERROR: address out of file range` | You exceeded file boundaries. Call `deck_get` to see actual line count. |
+| `ERROR: deck not terminated by END` | You forgot `@END` or `$END`. Always include it. |
+| `ERROR: terminator does not match deck marker` | Header uses `@`, terminator uses `$END` (or vice versa). Match them. |
+| `ERROR: file exists, <rev> required to overwrite` | `deck_create` on existing file without `<rev>`. Call `deck_get` first. |
+| `ERROR: <rev> must not be specified for new file` | `deck_create` on non-existent file with `<rev>`. Remove `<rev>`. |
+| `ERROR: unexpected payload after DELETE` | `DELETE` has no payload. Remove any text between `@DELETE N` and `@END`. |
+| `ERROR: operation after SKIP` | `SKIP` must be the last operation. Move other operations before it. |
+| `ERROR: INSERT requires single line address` | `INSERT` accepts only `N`, not `N-M`. |
+| `ERROR: invalid sed expression` | `REPLACE_REGEX` payload must be `s/pattern/replacement/flags`. |
+
 ## Available MCP Tools
 
 ### 1. `deck_get(file: str, addr: str)`
 Reads a range of lines. Returns numbered text and the `<rev>` hash.
+- `file`: path to the file (relative to workspace root).
 - `addr`: `N` (single line), `N-M` (range), `N-` (to the end of the file).
+- **Response includes `REV` — save it for the next `deck_apply` or `deck_create`.**
 
-### 2. `deck_create(file: str, rev: str | None)`
+### 2. `deck_create(file: str, content: str, rev: str | None)`
 Creates a new file or completely overwrites an existing one.
-- Reads text from `stdin` (in MCP, this is the `content` argument).
-- If the file exists, you **MUST** pass the current `<rev>`. If the file does not exist, do not pass `<rev>`.
+- `file`: path to the file (relative to workspace root).
+- `content`: the full file content as a string.
+- `rev`: required for overwriting existing files, forbidden for new files.
+- **Use only for new files or when >50% of lines change. For targeted edits, use `deck_apply`.**
 
 ### 3. `deck_apply(file: str, deck: str)`
 Applies a deck of commands to an existing file.
+- `file`: path to the file (relative to workspace root).
 - `deck`: a string containing the full deck text (header, operations, terminator).
+- **The file must exist — use `deck_create` for new files.**
+- **Deck is applied atomically — all or nothing.**
 
 ---
 
@@ -223,7 +338,50 @@ s#/usr/local/bin#/opt/bin#g
 @END
 ```
 
-### Example 11: APPEND — No Address, No SKIP
+### Example 11: REPLACE_REGEX — Unicode Emoji
+*Task: Replace a specific emoji in a string with multiple emoji.*
+```text
+# Input: 🔥🎉✨🚀💥
+@APPLY a1b2c3d4e5f6
+@REPLACE_REGEX 1
+s/🎉/party/g
+@END
+# Result: 🔥party✨🚀💥
+```
+
+### Example 12: REPLACE_REGEX — CJK Characters
+*Task: Replace Chinese characters.*
+```text
+# Input: 测试测试测试
+@APPLY a1b2c3d4e5f6
+@REPLACE_REGEX 1
+s/测试/test/g
+@END
+# Result: testtesttest
+```
+
+### Example 13: REPLACE_REGEX — Complex Emoji (ZWNJ Grapheme Cluster)
+*Task: Replace a family emoji (👨‍👩‍👧‍👦) — a single grapheme made of multiple code points.*
+```text
+# Input: Hello 👨‍👩‍👧‍👦 world
+@APPLY a1b2c3d4e5f6
+@REPLACE_REGEX 1
+s/👨‍👩‍👧‍👦/family/g
+@END
+# Result: Hello family world
+```
+
+### Example 14: REPLACE_REGEX — Accented Characters
+*Task: Replace accented characters across multiple lines.*
+```text
+# café → cafe, résumé → resume (all occurrences in lines 1–10)
+@APPLY a1b2c3d4e5f6
+@REPLACE_REGEX 1-10
+s/é/e/g
+@END
+```
+
+### Example 15: APPEND — No Address, No SKIP
 *Task: Append a line. Note: `APPEND` takes no address and does not support `SKIP`.*
 ```text
 @APPLY a1b2c3d4e5f6
@@ -232,7 +390,7 @@ new line at end
 @END
 ```
 
-### Example 12: Errors — APPEND
+### Example 16: Errors — APPEND
 ```text
 # ERROR: SKIP is not supported for APPEND
 @APPLY a1b2c3d4e5f6

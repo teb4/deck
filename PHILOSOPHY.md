@@ -116,6 +116,10 @@ A punch card is always an entire line. You could not replace a hole in the middl
 
 This decision did not come immediately. Initially, there was support for character addressing like `@REPLACE 10:5-12`. But it quickly became clear that Unicode turns character counting into a minefield. The model sees the emoji “👨‍👩‍👧‍👦” as one grapheme, while Python sees it as seven code points. The model cannot predict what position a letter will occupy after such a character. Character addressing was removed completely — and the positioning problems disappeared.
 
+However, there was still a gap: you could replace entire lines, but not individual characters within a line. If you wanted to change `café` to `cafe` or replace an emoji in a string, you had to replace the whole line — even if only one character changed. This was wasteful and imprecise.
+
+The solution was `REPLACE_REGEX` — a sed-style regex substitution applied to lines in a range. It doesn't address characters by position; it matches patterns by content. Python's `re` engine handles Unicode natively, so emoji, CJK characters, accented Latin — all work correctly. You can replace a specific emoji in a string with multiple emoji, swap Chinese characters for Latin text, or globally replace accented letters. The model doesn't need to count code points or graphemes; it just writes the pattern it sees in the `GET` output.
+
 Why not str_replace_editor and not Aider?
 
 `str_replace_editor` (popularized by Anthropic and SWE-bench). The model searches for a unique piece of text and replaces it. It breaks if the text is not unique, if the model hallucinates extra spaces, or if the code contains indistinguishable duplicate blocks.

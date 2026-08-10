@@ -50,3 +50,10 @@ When you receive an error from Deck, the file on disk remains unchanged. Analyze
 ## 6. Token Economy
 - Do not read the entire file (`deck_get file 1-`) if the file is large. Read only the necessary range around the target.
 - Use `@DRY` instead of `@APPLY` **only** for large or uncertain edits (see Section 4). For routine edits, `@APPLY` directly is more token-efficient.
+
+## 7. Unicode and Emoji
+- `REPLACE_REGEX` works with full Unicode: emoji, CJK characters, accented Latin, ZWNJ-joined grapheme clusters.
+- You can replace specific emoji in a string with multiple emoji: `s/🎉/party/g` replaces only the party emoji, leaving others untouched.
+- Complex emoji (e.g. `👨‍👩‍👧‍👦`) are single grapheme clusters — match them literally in the pattern.
+- Use different delimiters (`|`, `#`, `~`) if the pattern contains `/`.
+- Example: `s/🔥/fire/g`, `s/测试/test/g`, `s/👨‍👩‍👧‍👦/family/g`.

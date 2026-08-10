@@ -293,6 +293,50 @@ s/(temp)/\1_celsius/g
 Supported delimiters: `/`, `|`, `#`, `~`.
 Flags: `g` (global), without flag — first match only.
 
+#### Unicode, emoji, and CJK characters
+
+`REPLACE_REGEX` works with full Unicode — emoji, CJK characters, accented Latin, and any other characters supported by Python's `re` engine.
+
+```text
+# Replace a specific emoji in a string with multiple emoji
+# Input: 🔥🎉✨🚀💥
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 1
+s/🎉/party/g
+@END
+# Result: 🔥party✨🚀💥
+
+# Replace CJK characters
+# Input: 测试测试测试
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 1
+s/测试/test/g
+@END
+# Result: testtesttest
+
+# Replace accented characters across multiple lines
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 1-10
+s/é/e/g
+@END
+# café → cafe, résumé → resume (all occurrences in lines 1–10)
+
+# Use a different delimiter to avoid conflicts with the pattern
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 1
+s|🔥|fire|g
+@END
+# Result: fire✨🚀💥
+
+# Replace a complex emoji (ZWNJ-joined grapheme cluster)
+# Input: Hello 👨‍👩‍👧‍👦 world
+@APPLY a3f5b7c9d1e2f405
+@REPLACE_REGEX 1
+s/👨‍👩‍👧‍👦/family/g
+@END
+# Result: Hello family world
+```
+
 #### `APPEND` — append lines to end of file
 
 ```text

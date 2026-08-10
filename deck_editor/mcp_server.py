@@ -6,9 +6,16 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
+from deck_editor.logger import enable, disable
+from deck_editor.config import log_enabled
+
 app = FastMCP("deck-editor")
 
 WORKSPACE_ROOT = os.environ.get("DECK_EDITOR_WORKSPACE", ".")
+
+# Включаем логирование, если настроено в config
+if log_enabled:
+    enable()
 
 
 @app.tool(

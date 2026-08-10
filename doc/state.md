@@ -10,7 +10,13 @@
   - Адресация: `N`, `N-M`, `N-`
 - ✅ Операция APPEND — добавление строк в конец файла
   - Без адреса, без SKIP
-- ✅ 230 тестов (91% покрытие core-модулей)
+- ✅ Логирование
+  - Модуль `deck_editor.logger`
+  - По умолчанию отключено (`log_enabled: false` в config.yaml)
+  - Включается настройкой `log_enabled: true`
+  - Формат: `2026-08-10T14:32:11 GET file=... addr=... lines=... chars=...`
+  - События: GET, APPLY, REPLACE, REPLACE_REGEX, APPEND, END
+- ✅ 258 тестов (91%+ покрытие core-модулей)
 - ✅ Документация: SKILL.md, README.md, README.ru.md, spec.md
 
 ## Текущая ветка

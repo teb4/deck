@@ -9,6 +9,8 @@ _DEFAULTS = {
     "max_create_lines": 50000,
     "diff_preview_lines": 10,
     "diff_preview_threshold": 50,
+    "log_enabled": False,
+    "log_file": "",
 }
 
 
@@ -32,3 +34,6 @@ max_deck_lines: int = int(_merged()["max_deck_lines"])
 max_create_lines: int = int(_merged()["max_create_lines"])
 diff_preview_lines: int = int(_merged()["diff_preview_lines"])
 diff_preview_threshold: int = int(_merged()["diff_preview_threshold"])
+log_enabled: bool = bool(_merged()["log_enabled"])
+log_file: str = str(_merged()["log_file"])
+

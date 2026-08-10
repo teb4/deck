@@ -13,6 +13,13 @@ from deck_editor.utils import (
     compute_content_hash,
     compute_xxhash,
 )
+from deck_editor.logger import (
+    log_apply_start,
+    log_apply_end,
+    log_replace,
+    log_replace_regex,
+    log_append,
+)
 
 
 def apply(file_path: str, deck: Deck, workspace_root: str) -> Optional[str]:
@@ -41,38 +48,63 @@ def apply(file_path: str, deck: Deck, workspace_root: str) -> Optional[str]:
     # 3. Валидируем операции
     validate_operations(deck.operations, total_lines)
 
-    # 4. Применяем операции
+    # 4. Логгируем начало APPLY
+    log_apply_start(file_path, current_rev)
+
+    # 5. Применяем операции
     new_lines = _apply_all(lines, deck.operations)
 
-    # 5. Формируем новый rev
+    # 6. Формируем новый rev
     new_content = "".join(new_lines)
     new_rev = compute_content_hash(new_content)
 
     if deck.mode == "DRY":
         # Diff-предпросмотр
         result = _format_diff(lines, new_lines, current_rev, new_rev, deck.operations)
+        log_apply_end(True)
         return result
 
     elif deck.mode == "DRY_ALL":
         # Полный листинг
         result = _format_dry_all(new_lines, new_rev)
+        log_apply_end(True)
         return result
 
     elif deck.mode == "APPLY":
         # Атомарная запись
         atomic_write(file_path, new_content)
         result = _format_apply(lines, new_lines, new_rev, deck.operations)
+        log_apply_end(True)
         return result
 
+    log_apply_end(False)
     return None
 
 
 def _apply_all(lines: List[str], operations: List[Operation]) -> List[str]:
-    """Последовательно применяет все операции."""
+    """Последовательно применяет все операции с логированием."""
     result = list(lines)
     for op in operations:
+        _log_operation(op)
         result = apply_operation(result, op)
     return result
+
+
+def _log_operation(op: Operation) -> None:
+    """Логгирует одну операцию."""
+    if op.name == "REPLACE":
+        addr = op.address
+        start = addr.start
+        end = addr.end if not addr.is_to_end else None
+        log_replace(start, end)
+    elif op.name == "REPLACE_REGEX":
+        addr = op.address
+        start = addr.start
+        end = addr.end if not addr.is_to_end else None
+        sed_expr = op.payload[0] if op.payload else ""
+        log_replace_regex(start, end, sed_expr)
+    elif op.name == "APPEND":
+        log_append(len(op.payload))
 
 
 def _format_diff(

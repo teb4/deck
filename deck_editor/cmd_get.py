@@ -5,6 +5,7 @@ from typing import Tuple
 
 from deck_editor.parser import Address
 from deck_editor.utils import AddressError, compute_xxhash
+from deck_editor.logger import log_get
 
 
 def cmd_get(file_path: str, addr_str: str) -> None:
@@ -82,10 +83,12 @@ def get_lines(file_path: str, addr_str: str) -> Tuple[str, str, int]:
     start_idx = address.start - 1
     selected = lines[start_idx:end_idx]
 
+    # Логирование
+    char_count = sum(len(line) for line in selected)
+    log_get(file_path, addr_str, len(lines), char_count)
 
     output_lines = [f"REV: {rev}"]
     output_lines.extend(_format_lines(selected, address.start))
-
 
     return rev, "\n".join(output_lines), len(lines)
 

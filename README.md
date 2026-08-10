@@ -1,5 +1,15 @@
 # Deck Editor
 
+For those who don't have time to read the whole README.
+
+What this is for (very briefly):
+
+1. So an LLM doesn't waste time unsuccessfully trying to edit a file with `sed` or `diff/patch`, and then say: “I can't edit it, so I'll rewrite the whole file.”
+2. So the model can detect that someone else has modified the file while it was working.
+3. So the file doesn't get corrupted if the model, for whatever reason, fails to finish its response.
+
+Now for the longer version.
+
 A transactional text editor designed specifically for LLM agents.
 The model does not see or edit the file directly — it receives numbered fragments from the editor and responds with a batch ("deck") of commands, which is applied to the file atomically in a single pass.
 To control integrity and protect against version races, xxhash (`xxh64`) is used. `REV` is a 16-character hex hash of the current file contents.

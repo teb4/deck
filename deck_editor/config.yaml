@@ -1,11 +1,9 @@
-# Конфигурация Deck Editor
-# Все числовые параметры можно менять без изменения кода.
+# Deck Editor configuration
+# Set log_enabled: true to enable logging
 
-# Максимальное количество строк payload в колоде (APPLY/DRY)
 max_deck_lines: 5000
-
-# Максимальное количество строк для CREATE (создание/полная замена файла)
 max_create_lines: 50000
-
-# Количество строк для отображения в diff-блоках (DRY/DRY_ALL)
 diff_preview_lines: 10
+diff_preview_threshold: 50
+log_enabled: true
+log_file: /home/teb/me/projects/deck/deck-editor.log

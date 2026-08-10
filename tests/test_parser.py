@@ -245,3 +245,44 @@ s/foo/bar/g
 @END"""
         with raises(DeckSyntaxError):
             parse_deck(text)
+
+    def test_unknown_operation(self):
+        """Неизвестная команда должна вызвать ошибку."""
+        text = """@APPLY abcdef1234567890
+@REPLACE_CHAR 5
+новая строка
+@END"""
+        with raises(DeckSyntaxError) as exc_info:
+            parse_deck(text)
+        assert "unknown operation" in str(exc_info.value.args[0])
+        assert "REPLACE_CHAR" in str(exc_info.value.args[0])
+
+    def test_unknown_operation_with_skip(self):
+        """Неизвестная команда с SKIP должна вызвать ошибку."""
+        text = """@APPLY abcdef1234567890
+@REPLACE_CHAR 5 SKIP
+@END"""
+        with raises(DeckSyntaxError) as exc_info:
+            parse_deck(text)
+        assert "unknown operation" in str(exc_info.value.args[0])
+        assert "REPLACE_CHAR" in str(exc_info.value.args[0])
+
+    def test_unknown_operation_no_payload(self):
+        """Неизвестная команда без payload должна вызвать ошибку."""
+        text = """@APPLY abcdef1234567890
+@FOOBAR
+@END"""
+        with raises(DeckSyntaxError) as exc_info:
+            parse_deck(text)
+        assert "unknown operation" in str(exc_info.value.args[0])
+        assert "FOOBAR" in str(exc_info.value.args[0])
+
+    def test_unknown_operation_with_dollar_marker(self):
+        """Неизвестная команда с $ маркером должна вызвать ошибку."""
+        text = """$APPLY abcdef1234567890
+$CUSTOM_OP 10
+$END"""
+        with raises(DeckSyntaxError) as exc_info:
+            parse_deck(text)
+        assert "unknown operation" in str(exc_info.value.args[0])
+        assert "CUSTOM_OP" in str(exc_info.value.args[0])

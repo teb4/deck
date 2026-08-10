@@ -281,6 +281,11 @@ def _parse_operation(
         raise DeckSyntaxError("deck must start with DRY, DRY_ALL or APPLY")
 
     op_name = parts[0]
+
+    # Fast-Fail: проверяем, что команда известна
+    if op_name not in OPERATION_NAMES:
+        raise DeckSyntaxError(f"unknown operation: {op_name}")
+
     address = None
     skip = False
     payload_start = start + 1

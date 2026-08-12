@@ -29,6 +29,7 @@ To control integrity and protect against version races, xxhash (`xxh64`) is used
 - [Limits](#limits)
 - [Security and atomic writing](#security-and-atomic-writing)
 - [MCP server](#mcp-server)
+- [Integration with AgentTeams](#integration-with-agentteams)
 - [Recommended workflow for LLM agents](#recommended-workflow-for-llm-agents)
 - [Errors](#errors)
 - [Quick start](#quick-start)
@@ -647,6 +648,31 @@ For CLI, simply run the command from the desired working directory:
 cd /home/user/projects/other_project
 deck-editor get src/main.py 1-50
 ```
+
+### Integration with AgentTeams
+
+Deck Editor can be used as a **Skill** within the [AgentTeams](https://github.com/agentscope-ai/AgentTeams) framework. This provides agents with a safe, transactional way to edit files collaboratively.
+
+#### How It Works as a Skill
+
+*   **Packaged as a Skill**: The Deck Editor is pre-packaged as an AgentTeams Skill, ready for import. The Skill definition (including its name, description, and usage) is located in the `.claude/skills/deck-editor/` directory of this repository.
+*   **Atomic Operations**: The Skill utilizes Deck's core mechanism (`REV` and atomic `APPLY`) to ensure that file edits are applied without corruption or version conflicts.
+*   **Multi-Agent Coordination**: The Skill acts as a shared resource for a team of agents. Agents can read files (getting a `REV`) and submit changes. If the file is modified by another agent, the Skill will reject the outdated edit, forcing the agent to re-read the file.
+
+#### Example: A Team of Developer Agents
+
+In a typical development scenario, you could create an AgentTeams team with the following agents:
+1.  **Developer Agent**: Uses the `deck-editor` Skill to write and modify code.
+2.  **Reviewer Agent**: Uses the Skill to read files and review changes.
+3.  **Tester Agent**: Uses the Skill to read test results and logs.
+
+A workflow for a bug fix would be:
+1.  The **Reviewer Agent** identifies a bug and reads `src/main.py` using the Skill, noting the current `REV`.
+2.  The **Developer Agent** is tasked with the fix. It reads the file again (gets the same `REV`), plans changes, and **applies** them.
+3.  If another agent modified `src/main.py` in the meantime, the `apply` will fail, and the Developer Agent will be notified to re-read the file.
+
+This ensures a robust, conflict-free collaboration environment.
+
 
 ### Recommended workflow for LLM agents
 Deck is designed with the Unix-way in mind and delegates search to external tools.

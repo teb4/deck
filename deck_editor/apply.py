@@ -4,6 +4,7 @@ import os
 import difflib
 from typing import List, Optional, Tuple
 
+from deck_editor.anchored import apply_anchored
 from deck_editor.operations import apply_operation, validate_operations
 from deck_editor.parser import Deck, Operation
 from deck_editor.config import diff_preview_lines, diff_preview_threshold
@@ -12,6 +13,7 @@ from deck_editor.utils import (
     atomic_write,
     compute_content_hash,
     compute_xxhash,
+    format_numbered,
 )
 from deck_editor.logger import (
     log_apply_start,
@@ -31,13 +33,17 @@ def apply(file_path: str, deck: Deck, workspace_root: str) -> Optional[str]:
     # 1. Проверяем существование файла для APPLY
     if deck.mode == "APPLY" and not os.path.exists(file_path):
         from deck_editor.utils import DeckSyntaxError
-        raise DeckSyntaxError("file does not exist, use CREATE")
+        raise DeckSyntaxError(
+            "file does not exist, use CREATE",
+            hint="the target file does not exist. Use CREATE to create it first (or check the path).")
 
     # 1. Читаем файл и проверяем rev
     current_rev = compute_xxhash(file_path)
 
     if deck.rev is not None and deck.rev != current_rev:
-        raise VersionConflictError("version conflict — file changed")
+        raise VersionConflictError(
+            "version conflict — file changed",
+            hint="the file changed since you read it. Call deck_get again to get a fresh REV, then retry.")
 
     # 2. Читаем строки
     with open(file_path, "r", encoding="utf-8") as fh:
@@ -51,8 +57,8 @@ def apply(file_path: str, deck: Deck, workspace_root: str) -> Optional[str]:
     # 4. Логгируем начало APPLY
     log_apply_start(file_path, current_rev)
 
-    # 5. Применяем операции
-    new_lines = _apply_all(lines, deck.operations)
+    # 5. Применяем операции относительно оригинального файла
+    new_lines = _apply_all(lines, deck.operations, total_lines)
 
     # 6. Формируем новый rev
     new_content = "".join(new_lines)
@@ -81,13 +87,19 @@ def apply(file_path: str, deck: Deck, workspace_root: str) -> Optional[str]:
     return None
 
 
-def _apply_all(lines: List[str], operations: List[Operation]) -> List[str]:
-    """Последовательно применяет все операции с логированием."""
-    result = list(lines)
+def _apply_all(
+    lines: List[str], operations: List[Operation], total_lines: int
+) -> List[str]:
+    """Применяет все операции относительно оригинального файла.
+
+    Адреса всех операций относятся к исходному файлу (тому, что прочитан через
+    GET); перед применением они не сдвигаются — слияние делает
+    `apply_anchored`. Это отличается от старой «цепочки», где каждая операция
+    работала с результатом предыдущей и номера строк сдвигались.
+    """
     for op in operations:
         _log_operation(op)
-        result = apply_operation(result, op)
-    return result
+    return apply_anchored(lines, operations, total_lines)
 
 
 def _log_operation(op: Operation) -> None:
@@ -197,14 +209,7 @@ def _format_dry_all(lines: List[str], rev: str) -> str:
     if not lines:
         return f"REV: {rev} (would be new)\n(Empty file: 0 lines)"
     output_lines = [f"REV: {rev}"]
-    for i, line in enumerate(lines):
-        line_num = i + 1
-        padded = f"{line_num:06d}"
-        content = line.rstrip("\n").rstrip("\r\n")
-        if content == "":
-            output_lines.append(f"{padded}e")
-        else:
-            output_lines.append(f"{padded}:{content}")
+    output_lines.extend([format_numbered(i + 1, line) for i, line in enumerate(lines)])
     return "\n".join(output_lines)
 
 

@@ -7,7 +7,7 @@ import pytest
 
 from deck_editor.apply import apply
 from deck_editor.parser import Address, Deck, Operation
-from deck_editor.utils import VersionConflictError
+from deck_editor.utils import VersionConflictError, DeckSyntaxError
 
 
 class TestApply:
@@ -152,8 +152,8 @@ class TestApply:
                     ),
                     Operation(
                         name="REPLACE",
-                        address=Address.parse("2"),
-                        payload=["новая 2\n", "новая 3\n"],
+                        address=Address.parse("4"),
+                        payload=["замена 4\n"],
                     ),
                 ],
             )
@@ -161,9 +161,138 @@ class TestApply:
 
             with open(path, "r") as fh:
                 content = fh.read()
-            # После DELETE строка 2 удалена, строка 3 стала строкой 2
-            # REPLACE 2 заменяет строку 2 (была строка 3) на 2 строки
-            assert content == "строка 1\nновая 2\nновая 3\nстрока 4\n"
+            # Обе операции привязаны к ОРИГИНАЛЬНЫМ строкам:
+            # DELETE 2 удаляет строку 2, REPLACE 4 меняет строку 4.
+            # Номера строк НЕ сдвигаются между операциями.
+            assert content == "строка 1\nстрока 3\nзамена 4\n"
+        finally:
+            os.unlink(path)
+
+    def test_apply_independent_zero_width_and_width(self):
+        """INSERT_HEAD и REPLACE привязаны к оригиналу, а не к результату."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("строка 1\nстрока 2\n")
+            path = f.name
+
+        try:
+            rev = self._get_rev(path)
+            deck = Deck(
+                mode="APPLY",
+                rev=rev,
+                operations=[
+                    Operation(
+                        name="INSERT_HEAD",
+                        address=Address.parse("1"),
+                        payload=["вставка\n"],
+                    ),
+                    Operation(
+                        name="REPLACE",
+                        address=Address.parse("2"),
+                        payload=["замена 2\n"],
+                    ),
+                ],
+            )
+            apply(path, deck, os.path.dirname(path))
+
+            with open(path, "r") as fh:
+                content = fh.read()
+            # INSERT_HEAD вставляет перед строкой 1, REPLACE 2 (оригинал) меняет строку 2.
+            assert content == "вставка\nстрока 1\nзамена 2\n"
+        finally:
+            os.unlink(path)
+
+    def test_apply_overlapping_operations_error(self):
+        """Две операции на одной строке оригинала — ошибка «operations overlap»."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("строка 1\nстрока 2\nстрока 3\n")
+            path = f.name
+
+        try:
+            rev = self._get_rev(path)
+            deck = Deck(
+                mode="APPLY",
+                rev=rev,
+                operations=[
+                    Operation(
+                        name="DELETE",
+                        address=Address.parse("2"),
+                        payload=[],
+                    ),
+                    Operation(
+                        name="REPLACE",
+                        address=Address.parse("2"),
+                        payload=["новая\n"],
+                    ),
+                ],
+            )
+            with pytest.raises(DeckSyntaxError):
+                apply(path, deck, os.path.dirname(path))
+            # Файл не изменён после ошибки.
+            with open(path, "r") as fh:
+                assert fh.read() == "строка 1\nстрока 2\nстрока 3\n"
+        finally:
+            os.unlink(path)
+
+    def test_apply_overlapping_touch_error(self):
+        """REPLACE 1-2 и REPLACE 2-3 касаются строки 2 — ошибка."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("a\nb\nc\n")
+            path = f.name
+
+        try:
+            rev = self._get_rev(path)
+            deck = Deck(
+                mode="APPLY",
+                rev=rev,
+                operations=[
+                    Operation(
+                        name="REPLACE",
+                        address=Address.parse("1-2"),
+                        payload=["x\n"],
+                    ),
+                    Operation(
+                        name="REPLACE",
+                        address=Address.parse("2-3"),
+                        payload=["y\n"],
+                    ),
+                ],
+            )
+            with pytest.raises(DeckSyntaxError):
+                apply(path, deck, os.path.dirname(path))
+        finally:
+            os.unlink(path)
+
+    def test_apply_zero_width_same_gap_ok(self):
+        """Несколько вставок в одну «дырку» — разрешено, порядок по колоде."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("строка 1\n")
+            path = f.name
+
+        try:
+            rev = self._get_rev(path)
+            deck = Deck(
+                mode="APPLY",
+                rev=rev,
+                operations=[
+                    Operation(
+                        name="INSERT_HEAD",
+                        address=Address.parse("1"),
+                        payload=["первая\n"],
+                    ),
+                    Operation(
+                        name="INSERT_HEAD",
+                        address=Address.parse("2"),
+                        payload=["вторая\n"],
+                    ),
+                ],
+            )
+            apply(path, deck, os.path.dirname(path))
+
+            with open(path, "r") as fh:
+                content = fh.read()
+            # Обе вставки в «дырку» перед строкой 1 (INSERT_HEAD всегда gap 0),
+            # порядок как в колоде.
+            assert content == "первая\nвторая\nстрока 1\n"
         finally:
             os.unlink(path)
 

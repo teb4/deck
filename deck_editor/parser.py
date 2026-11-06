@@ -1,6 +1,8 @@
 """Парсер колод Deck Editor.
 
 Распознаёт заголовок, операции и терминатор согласно спецификации.
+Все синтаксические ошибки несут подсказку (hint) о том, как должно быть
+правильно — для агентов LLM.
 """
 
 import re
@@ -16,6 +18,11 @@ OPERATION_NAMES = {"REPLACE", "DELETE", "INSERT", "INSERT_HEAD",
 HEADER_NAMES = {"DRY", "DRY_ALL", "APPLY"}
 TERMINATOR_NAME = "END"
 
+# Операции, которым нужен адрес
+_ADDRESSED_OPS = {"REPLACE", "DELETE", "INSERT", "REPLACE_REGEX"}
+# Операции, которым адрес (и SKIP) не нужен
+_ADDRESSLESS_OPS = {"INSERT_HEAD", "APPEND"}
+
 # Паттерн для адреса: N, N-M, N-
 ADDR_PATTERN = re.compile(r"^(\d+)(?:-(\d+|-))?$")
 ADDR_RANGE_PATTERN = re.compile(r"^(\d+)-(\d+)$")
@@ -26,7 +33,7 @@ ADDR_TO_END_PATTERN = re.compile(r"^(\d+)-$")
 class Address:
     """Адрес в колоде: одиночная строка, диапазон или от строки до конца."""
     start: int
-    end: Optional[int] = None  # None означает "до конца" (N-) или single (N)
+    end: Optional[int] = None  # None означает "до конца" (N-) or single (N)
     is_to_end: bool = False  # True для N-, False для N (single)
 
     @classmethod
@@ -44,7 +51,10 @@ class Address:
         m_single = re.match(r"^(\d+)$", addr_str)
         if m_single:
             return cls(start=int(m_single.group(1)), end=None, is_to_end=False)
-        raise DeckSyntaxError(f"invalid address: {addr_str}")
+        raise DeckSyntaxError(
+            f"invalid address: {addr_str}",
+            hint="address must be `N`, `N-M` or `N-` with digits only, e.g. `5`, `5-10` or `5-`",
+        )
 
     def __str__(self) -> str:
         if self.is_to_end:
@@ -90,6 +100,13 @@ class Deck:
         return f"Deck({self.mode}, rev={self.rev}, ops={len(self.operations)})"
 
 
+def _marker_from_line(line: str) -> Optional[str]:
+    """Определяет маркер из строки: '@', '$' или None, если строка не с маркера."""
+    if line and line[0] in ("@", "$"):
+        return line[0]
+    return None
+
+
 def parse_deck(text: str) -> Deck:
     """
     Парсит текст колоды.
@@ -103,49 +120,74 @@ def parse_deck(text: str) -> Deck:
         op_name      := "REPLACE" | "DELETE" | "INSERT" | "INSERT_HEAD"
         терминатор   := маркер "END"
 
-    Важно: терминатор — это всегда последняя строка колоды.
+    Важно: маркер определяется по первой строке. Если он не определён — это
+    ошибка, и проверку терминатора можно не делать (заголовок приоритетнее).
     """
     lines = text.splitlines()
     if not lines:
-        raise DeckSyntaxError("deck must start with DRY, DRY_ALL or APPLY")
+        raise DeckSyntaxError(
+            "deck must start with DRY, DRY_ALL or APPLY",
+            hint="the deck is empty — start it with a header line, e.g. \"@APPLY a1b2c3d4e5f6\"",
+        )
 
-    # 0. Проверяем терминатор — он всегда последняя строка колоды
-    last_line = lines[-1].strip()
-    if not _is_terminator(last_line, None):
-        raise DeckSyntaxError("deck not terminated by END")
-
-    # Определяем маркер из терминатора
-    term_marker, term_cmd = _parse_terminator(last_line, None)
-    if term_cmd != TERMINATOR_NAME:
-        raise DeckSyntaxError("deck not terminated by END")
-
-    # 1. Парсим заголовок
     header_line = lines[0].strip()
-    deck, header_end = _parse_header(header_line)
-    marker = deck.marker
+
+    # 0. Маркер определяется по первой строке. Если маркер не определён —
+    #    это ошибка, и проверку терминатора можно не делать.
+    marker = _marker_from_line(header_line)
+    if marker is None:
+        raise DeckSyntaxError(
+            "deck must start with DRY, DRY_ALL or APPLY",
+            hint=("first line must start with a marker (`@` or `$`), then a command, "
+                  "e.g. \"@APPLY a1b2c3d4e5f6\""),
+        )
+
+    # 1. Заголовок
+    deck, header_end = _parse_header(header_line, marker)
 
     if header_end >= len(lines):
-        raise DeckSyntaxError("deck must start with DRY, DRY_ALL or APPLY")
+        raise DeckSyntaxError(
+            "deck must start with DRY, DRY_ALL or APPLY",
+            hint=(f"first line must be a header \"{marker}APPLY <rev>\" where "
+                  "<rev> is 16 hex chars (0-9a-f)"),
+        )
 
-    # 2. Проверяем, что терминатор совпадает с маркером заголовка
-    if term_marker != marker:
-        raise DeckSyntaxError("terminator does not match deck marker")
+    # 2. Терминатор — проверяем уже известным маркером. Различаем «терминатора
+    #    нет вообще» и «терминатор с неправильным маркером».
+    last_line = lines[-1].strip()
+    if _is_terminator(last_line, None):
+        term_marker, _ = _parse_terminator(last_line, None)
+        if term_marker != marker:
+            raise DeckSyntaxError(
+                "terminator does not match deck marker",
+                hint=(f"header and terminator must share the marker. Header uses "
+                      f"\"{marker}\", so the last line must be \"{marker}END\""),
+            )
+    else:
+        raise DeckSyntaxError(
+            "deck not terminated by END",
+            hint=f"the last line must read \"{marker}END\" (e.g. \"{marker}END\")",
+        )
 
-    # 3. Парсим тело — операции (до предпоследней строки, т.к. последняя — терминатор)
+    # 3. Тело — операции
+    deck.marker = marker
     ops, body_end = _parse_operations(lines, header_end, marker)
     deck.operations = ops
 
     # 4. Проверяем, что body_end указывает на терминатор (предпоследняя строка)
     if body_end != len(lines) - 1:
-        raise DeckSyntaxError("trailing lines after END")
+        raise DeckSyntaxError(
+            "trailing lines after END",
+            hint=f"nothing may appear after \"{marker}END\" — it must be the last line",
+        )
 
     # 5. Валидация операций
-    _validate_parsed_operations(deck.operations)
+    _validate_parsed_operations(deck.operations, marker)
 
     return deck
 
 
-def _validate_parsed_operations(operations: List[Operation]) -> None:
+def _validate_parsed_operations(operations: List[Operation], marker: str = "@") -> None:
     """Валидация операций на этапе парсинга (приоритеты 6–11 из spec §15).
 
     Проверка DELETE with payload (приоритет 5) выполняется в _parse_operation
@@ -154,66 +196,100 @@ def _validate_parsed_operations(operations: List[Operation]) -> None:
     for op in operations:
         # INSERT требует одиночный адрес (приоритет 8)
         if op.name == "INSERT" and op.address is not None and op.address.end is not None:
-            raise DeckSyntaxError("INSERT requires single line address")
+            raise DeckSyntaxError(
+                "INSERT requires single line address",
+                hint=(f"\"{marker}INSERT\" takes only a single line, e.g. "
+                      f"\"{marker}INSERT 5\", not a range"),
+            )
 
-        # INSERT_HEAD не должен иметь address (приоритет 9)
+        # INSERT_HEAD не должен иметь address
         if op.name == "INSERT_HEAD" and op.address is not None:
-            raise DeckSyntaxError("INSERT_HEAD takes no address")
+            raise DeckSyntaxError(
+                "INSERT_HEAD takes no address",
+                hint=f"\"{marker}INSERT_HEAD\" takes no address — write only \"{marker}INSERT_HEAD\".",
+            )
 
         # REPLACE_REGEX требует адрес (N, N-M, N-)
         if op.name == "REPLACE_REGEX" and op.address is None:
-            raise DeckSyntaxError("REPLACE_REGEX requires an address")
+            raise DeckSyntaxError(
+                "REPLACE_REGEX requires an address",
+                hint=f"\"{marker}REPLACE_REGEX\" needs an address, e.g. \"{marker}REPLACE_REGEX 1-10\".",
+            )
 
         # APPEND не должен иметь address
         if op.name == "APPEND" and op.address is not None:
-            raise DeckSyntaxError("APPEND takes no address")
+            raise DeckSyntaxError(
+                "APPEND takes no address",
+                hint=f"\"{marker}APPEND\" takes no address — write only \"{marker}APPEND\".",
+            )
 
         # APPEND не должен иметь SKIP
         if op.name == "APPEND" and op.skip:
-            raise DeckSyntaxError("APPEND does not support SKIP")
+            raise DeckSyntaxError(
+                "APPEND does not support SKIP",
+                hint=f"\"{marker}APPEND\" takes no address and no SKIP — write only \"{marker}APPEND\".",
+            )
 
         # REPLACE_REGEX не должен иметь SKIP (payload всегда идёт до END)
         if op.name == "REPLACE_REGEX" and op.skip:
-            raise DeckSyntaxError("REPLACE_REGEX does not support SKIP")
+            raise DeckSyntaxError(
+                "REPLACE_REGEX does not support SKIP",
+                hint=(f"\"{marker}REPLACE_REGEX\" payload runs to "
+                      f"\"{marker}END\" and takes no SKIP"),
+            )
 
         # Валидация диапазона: N-M где M < N (приоритет 11)
         if op.address is not None and op.address.end is not None:
             if op.address.start > op.address.end:
-                raise DeckSyntaxError("invalid address range — start > end")
+                raise DeckSyntaxError(
+                    "invalid address range — start > end",
+                    hint="for a range `N-M` the second number must be >= the first, e.g. `5-10`",
+                )
 
 
-def _parse_header(line: str) -> Tuple[Deck, int]:
+def _parse_header(line: str, marker: Optional[str] = None) -> Tuple[Deck, int]:
     """
     Парсит заголовок колоды.
     Возвращает Deck и индекс следующей строки после заголовка.
     """
-    if not line:
-        raise DeckSyntaxError("deck must start with DRY, DRY_ALL or APPLY")
+    if marker is None:
+        marker = _marker_from_line(line) or "@"
+    if not line or line[0] != marker:
+        raise DeckSyntaxError(
+            "deck must start with DRY, DRY_ALL or APPLY",
+            hint=(f"first line must start with the marker \"{marker}\" followed by "
+                  f"DRY, DRY_ALL or APPLY, e.g. \"{marker}APPLY a1b2c3d4e5f6\""),
+        )
 
-    # Определяем маркер
-    if line.startswith("@"):
-        marker = "@"
-        rest = line[1:]
-    elif line.startswith("$"):
-        marker = "$"
-        rest = line[1:]
-    else:
-        raise DeckSyntaxError("deck must start with DRY, DRY_ALL or APPLY")
-
-    # Парсим команду
+    rest = line[1:]
     parts = rest.split()
     if not parts:
-        raise DeckSyntaxError("deck must start with DRY, DRY_ALL or APPLY")
+        raise DeckSyntaxError(
+            "deck must start with DRY, DRY_ALL or APPLY",
+            hint=f"first line must be a header like \"{marker}APPLY <rev>\".",
+        )
 
     cmd = parts[0]
     if cmd not in HEADER_NAMES:
-        raise DeckSyntaxError("deck must start with DRY, DRY_ALL or APPLY")
+        raise DeckSyntaxError(
+            "deck must start with DRY, DRY_ALL or APPLY",
+            hint=(f"\"{marker}{cmd}\" is not a header; use \"{marker}APPLY\", "
+                  f"\"{marker}DRY\" or \"{marker}DRY_ALL\" with a <rev>"),
+        )
 
     rev = parts[1] if len(parts) > 1 else None
     if rev is None:
-        raise DeckSyntaxError('<rev> is mandatory for existing files')
+        raise DeckSyntaxError(
+            '<rev> is mandatory for existing files',
+            hint=(f"add the current REV after the command, e.g. "
+                  f"\"{marker}APPLY a1b2c3d4e5f6\" (get it from deck_get)"),
+        )
     if len(rev) != 16 or not all(c in '0123456789abcdef' for c in rev):
-        raise DeckSyntaxError('invalid <rev> format')
+        raise DeckSyntaxError(
+            'invalid <rev> format',
+            hint=(f"<rev> is exactly 16 hex chars (0-9a-f), e.g. "
+                  f"\"{marker}APPLY a1b2c3d4e5f6\""),
+        )
     return Deck(mode=cmd, rev=rev, marker=marker), 1
 
 
@@ -238,7 +314,11 @@ def _parse_operations(
         if raw_line and raw_line[0] == marker:
             # Это новая команда
             if has_skip:
-                raise DeckSyntaxError("operation after SKIP")
+                raise DeckSyntaxError(
+                    "operation after SKIP",
+                    hint=("`SKIP` must be the last operation; everything after it is "
+                          "payload. Move other operations before it."),
+                )
             # Проверяем, не терминатор ли это (ранний END)
             if _is_terminator(line, marker):
                 return operations, idx
@@ -255,9 +335,11 @@ def _parse_operations(
             idx += 1
         else:
             # Это не команда и не начинается с маркера — ошибка
-            raise DeckSyntaxError("unexpected line — expected command or payload")
-
-
+            raise DeckSyntaxError(
+                "unexpected line — expected command or payload",
+                hint=(f"after a command, payload lines follow until the next "
+                      f"\"{marker}\" line or \"{marker}END\"."),
+            )
 
     # idx указывает на терминатор — это нормально
     return operations, idx
@@ -271,6 +353,11 @@ def _parse_operation(
     """
     Парсит одну операцию.
     Возвращает Operation и индекс следующей строки после payload.
+
+    Строка команды полностью разбирается грамматикой:
+      <marker> <op> [<address>] [SKIP]
+    Всё лишнее после адреса (кроме SKIP) — ошибка, потому что у команды
+    нет «хвоста», а новый текст лежит на следующих строках.
     """
     line = lines[start].strip()
     # Убираем маркер
@@ -278,55 +365,92 @@ def _parse_operation(
     parts = rest.split()
 
     if not parts:
-        raise DeckSyntaxError("deck must start with DRY, DRY_ALL or APPLY")
+        raise DeckSyntaxError(
+            "deck must start with DRY, DRY_ALL or APPLY",
+            hint=f"command lines must start with the marker \"{marker}\", e.g. \"{marker}REPLACE 5\".",
+        )
 
     op_name = parts[0]
 
     # Fast-Fail: проверяем, что команда известна
     if op_name not in OPERATION_NAMES:
-        raise DeckSyntaxError(f"unknown operation: {op_name}")
+        raise DeckSyntaxError(
+            f"unknown operation: {op_name}",
+            hint=("valid operations are REPLACE, DELETE, INSERT, INSERT_HEAD, "
+                  f"REPLACE_REGEX, APPEND — write \"{marker}{op_name}\" using one of them"),
+        )
 
     address = None
     skip = False
-    payload_start = start + 1
-    if len(parts) > 1:
+    rest_tokens = parts[1:]
 
-
-        second = parts[1]
-        if second == "SKIP":
-            if len(parts) > 2:
-                raise DeckSyntaxError("SKIP takes no arguments")
-            skip = True
-            payload_start = start + 1
-        elif op_name == "INSERT_HEAD":
-            raise DeckSyntaxError("INSERT_HEAD takes no address")
-        else:
-            # Это адрес
-            address = Address.parse(second)
-            # Проверяем, есть ли SKIP после адреса
-            if len(parts) > 2 and parts[2] == "SKIP":
-                if len(parts) > 3:
-                    raise DeckSyntaxError("SKIP takes no arguments")
+    if op_name == "INSERT_HEAD":
+        # INSERT_HEAD — без адреса, но SKIP разрешён
+        if rest_tokens:
+            if len(rest_tokens) == 1 and rest_tokens[0] == "SKIP":
                 skip = True
-                payload_start = start + 1
             else:
-                payload_start = start + 1
+                raise DeckSyntaxError(
+                    "INSERT_HEAD takes no address",
+                    hint=(f"\"{marker}INSERT_HEAD\" takes no address; only an optional "
+                          f"SKIP is allowed — write \"{marker}INSERT_HEAD\" or "
+                          f"\"{marker}INSERT_HEAD SKIP\"."),
+                )
+    elif op_name == "APPEND":
+        # APPEND — ни адреса, ни SKIP
+        if rest_tokens:
+            raise DeckSyntaxError(
+                "APPEND takes no address",
+                hint=(f"\"{marker}APPEND\" takes no address and no SKIP — "
+                      f"write only \"{marker}APPEND\"."),
+            )
+    else:
+        # REPLACE / DELETE / INSERT / REPLACE_REGEX — адрес (опц.) + SKIP (опц.)
+        if rest_tokens:
+            if rest_tokens[0] == "SKIP":
+                raise DeckSyntaxError(
+                    f"{op_name} requires an address",
+                    hint=(f"write \"{marker}{op_name} <address>[SKIP]\", e.g. "
+                          f"\"{marker}{op_name} 5\""),
+                )
+            address = Address.parse(rest_tokens[0])
+            remaining = rest_tokens[1:]
+            if remaining:
+                if len(remaining) == 1 and remaining[0] == "SKIP":
+                    skip = True
+                elif remaining[0] == "SKIP":
+                    raise DeckSyntaxError(
+                        "SKIP takes no arguments",
+                        hint=("SKIP is a boolean flag with no arguments — write "
+                              f"\"{marker}{op_name} 5 SKIP\", not "
+                              f"\"{marker}{op_name} 5 SKIP 3\"."),
+                    )
+                else:
+                    raise DeckSyntaxError(
+                        f'unexpected token "{remaining[0]}" after address in {marker}{op_name}',
+                        hint=(f"a command line is fully the command "
+                              f"\"{marker}{op_name} <address> [SKIP]\"; put new text on "
+                              f"the following lines — Deck edits whole lines, not characters"),
+                    )
 
+    payload_start = start + 1
 
     # Fast-Fail: DELETE не должен иметь SKIP (spec §6, §11) — проверяем ДО payload
     if op_name == "DELETE" and skip:
-        raise DeckSyntaxError("DELETE does not support SKIP")
+        raise DeckSyntaxError(
+            "DELETE does not support SKIP",
+            hint=f"\"{marker}DELETE\" takes an address only, no SKIP — e.g. \"{marker}DELETE 5\".",
+        )
 
     # Fast-Fail: REPLACE_REGEX не должен иметь SKIP (payload всегда идёт до END)
     if op_name == "REPLACE_REGEX" and skip:
-        raise DeckSyntaxError("REPLACE_REGEX does not support SKIP")
-
-    # Fast-Fail: DELETE не должен иметь payload (spec §15, приоритет 5)
-    if op_name == "DELETE" and len(parts) > 2:
-        raise DeckSyntaxError("unexpected payload after DELETE")
+        raise DeckSyntaxError(
+            "REPLACE_REGEX does not support SKIP",
+            hint=(f"\"{marker}REPLACE_REGEX\" payload runs to "
+                  f"\"{marker}END\" and takes no SKIP — e.g. \"{marker}REPLACE_REGEX 1-10\"."),
+        )
 
     op = Operation(name=op_name, address=address, skip=skip)
-
 
     # Если SKIP — payload идёт до терминатора
     if skip:
@@ -337,7 +461,7 @@ def _parse_operation(
                 return op, idx
             op.payload.append(lines[idx])
             idx += 1
-        # Если дошли до конца без терминатора — вернём len(lines)
+        # Если дошёл до конца без терминатора — вернём len(lines)
         return op, idx
 
     # REPLACE_REGEX — payload (sed-выражение) до терминатора
@@ -388,7 +512,7 @@ def _parse_operation(
         # idx указывает на терминатор или конец — вернём idx
         return op, idx
 
-    # DELETE — Fast-Fail: если есть хоть одна строка payload, бросаем ошибку сразу
+    # DELETE — Fast-Fail: если есть хоть одна строка payload, бросаем немедленно
     if op_name == "DELETE":
         idx = payload_start
         while idx < len(lines) - 1:
@@ -396,7 +520,10 @@ def _parse_operation(
             if _is_command(next_line, marker) or _is_terminator(next_line, marker):
                 return op, idx
             # Первая строка payload — ошибка, бросаем немедленно
-            raise DeckSyntaxError("unexpected payload after DELETE")
+            raise DeckSyntaxError(
+                "unexpected payload after DELETE",
+                hint=f"\"{marker}DELETE\" has no payload — delete by address only, e.g. \"{marker}DELETE 5\".",
+            )
         return op, idx
 
     return op, payload_start

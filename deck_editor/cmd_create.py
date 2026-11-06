@@ -9,6 +9,7 @@ from deck_editor.utils import (
     atomic_write,
     compute_content_hash,
     compute_xxhash,
+    format_numbered,
 )
 
 
@@ -30,7 +31,10 @@ def cmd_create(file_path: str, rev: str = None, workspace_root: str = None) -> N
     lines = content.splitlines()
 
     if len(lines) > max_create_lines:
-        raise ValueError(f"CREATE exceeds limit: {len(lines)} > {max_create_lines}")
+        raise ValueError(
+            f"CREATE exceeds limit: {len(lines)} > {max_create_lines}",
+            hint=(f"CREATE writes a whole file; the limit is {max_create_lines} lines. "
+                  f"For targeted edits use APPLY with @REPLACE instead."))
 
     # Обеспечиваем завершающий перевод строки
     if content and not content.endswith("\n"):
@@ -41,15 +45,21 @@ def cmd_create(file_path: str, rev: str = None, workspace_root: str = None) -> N
     if file_exists:
         # Файл существует — rev обязателен
         if rev is None:
-            raise VersionConflictError("file exists, <rev> required to overwrite")
+            raise VersionConflictError(
+                "file exists, <rev> required to overwrite",
+                hint="call deck_get (or deck_rev) first to read the current REV, then pass it to CREATE.")
         # Проверяем rev
         current_rev = compute_xxhash(file_path)
         if rev != current_rev:
-            raise VersionConflictError("version conflict — file changed")
+            raise VersionConflictError(
+                "version conflict — file changed",
+                hint="the file changed since you read it. Call deck_get again to get a fresh REV, then retry.")
     else:
         # Файл не существует — rev запрещён
         if rev is not None:
-            raise VersionConflictError("<rev> must not be specified for new file")
+            raise VersionConflictError(
+                "<rev> must not be specified for new file",
+                hint="this is a new file — call CREATE without a REV.")
 
     # Атомарная запись
     atomic_write(file_path, content)
@@ -57,12 +67,6 @@ def cmd_create(file_path: str, rev: str = None, workspace_root: str = None) -> N
     # Возвращаем нумерованный листинг
     new_rev = compute_content_hash(content)
     output_lines = [f"REV: {new_rev}"]
-    for i, line in enumerate(lines):
-        line_num = i + 1
-        padded = f"{line_num:06d}"
-        if line == "":
-            output_lines.append(f"{padded}e")
-        else:
-            output_lines.append(f"{padded}:{line}")
+    output_lines.extend([format_numbered(i + 1, line) for i, line in enumerate(lines)])
 
     print("\n".join(output_lines))

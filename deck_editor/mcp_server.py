@@ -46,6 +46,43 @@ def get(file: str, addr: str, workspace: str = None) -> str:
 
 
 @app.tool(
+    name="rev",
+    description=(
+        "RETURN only the REV hash and line count of a file. "
+        "Use this when you only need to refresh the <rev> (e.g. after an "
+        "external change) or to learn the file size. Do NOT call this to read "
+        "content — use get() for that. Returns 'REV: <hash>' and 'LINES: <n>'."
+    ),
+)
+def rev(file: str, workspace: str = None) -> str:
+    """Return only the REV hash and total line count of a file.
+
+    Args:
+        file: Path to file (relative to workspace root).
+        workspace: Optional workspace root.
+
+    Returns:
+        'REV: <hash>' and 'LINES: <count>'.
+    """
+    from deck_editor.cmd_get import get_rev_and_count
+    from deck_editor.utils import (AccessDeniedError, format_error, validate_path)
+
+    root = workspace or WORKSPACE_ROOT
+
+    try:
+        file_path = validate_path(file, root)
+        file_rev, total_lines = get_rev_and_count(file_path)
+    except FileNotFoundError:
+        return format_error(FileNotFoundError(f"file not found — {file}"),
+                            hint="check that the path is correct and the file exists in the workspace.")
+    except AccessDeniedError as exc:
+        return format_error(exc, hint="the path is outside the working directory.")
+
+    output_lines = [f"REV: {file_rev}", f"LINES: {total_lines}"]
+    return "\n".join(output_lines)
+
+
+@app.tool(
     name="create",
     description=(
         "CREATE a NEW file or FULLY OVERWRITE an existing file. "
@@ -73,6 +110,8 @@ def create(file: str, content: str, rev: str | None = None, workspace: str = Non
         atomic_write,
         compute_content_hash,
         compute_xxhash,
+        format_error,
+        format_numbered,
         validate_path,
     )
 
@@ -80,35 +119,41 @@ def create(file: str, content: str, rev: str | None = None, workspace: str = Non
     file_path = validate_path(file, root)
     lines = content.splitlines()
 
-    if len(lines) > max_create_lines:
-        raise ValueError(f"CREATE exceeds limit: {len(lines)} > {max_create_lines}")
+    try:
+        if len(lines) > max_create_lines:
+            raise ValueError(
+                f"CREATE exceeds limit: {len(lines)} > {max_create_lines}",
+                hint=(f"CREATE writes a whole file; the limit is {max_create_lines} lines. "
+                      f"For targeted edits use APPLY with @REPLACE instead."))
 
-    if content and not content.endswith("\n"):
-        content += "\n"
+        if content and not content.endswith("\n"):
+            content += "\n"
 
-    file_exists = os.path.isfile(file_path)
+        file_exists = os.path.isfile(file_path)
 
-    if file_exists:
-        if rev is None:
-            raise VersionConflictError("file exists, <rev> required to overwrite")
-        current_rev = compute_xxhash(file_path)
-        if rev != current_rev:
-            raise VersionConflictError("version conflict — file changed. Call mcp__deck-editor__get(file, addr) FIRST to get current REV, then retry apply with that REV.")
-    else:
-        if rev is not None:
-            raise VersionConflictError("<rev> must not be specified for new file")
+        if file_exists:
+            if rev is None:
+                raise VersionConflictError(
+                    "file exists, <rev> required to overwrite",
+                    hint="call get() first to read the current REV, then pass it to CREATE.")
+            current_rev = compute_xxhash(file_path)
+            if rev != current_rev:
+                raise VersionConflictError(
+                    "version conflict — file changed",
+                    hint="the file changed since you read it. Call get() again for a fresh REV, then retry.")
+        else:
+            if rev is not None:
+                raise VersionConflictError(
+                    "<rev> must not be specified for new file",
+                    hint="this is a new file — call CREATE without a REV.")
+    except (VersionConflictError, ValueError) as exc:
+        return format_error(exc)
 
     atomic_write(file_path, content)
 
     new_rev = compute_content_hash(content)
     output_lines = [f"REV: {new_rev}"]
-    for i, line in enumerate(lines):
-        line_num = i + 1
-        padded = f"{line_num:06d}"
-        if line == "":
-            output_lines.append(f"{padded}e")
-        else:
-            output_lines.append(f"{padded}:{line}")
+    output_lines.extend([format_numbered(i + 1, line) for i, line in enumerate(lines)])
 
     return "\n".join(output_lines)
 
@@ -143,6 +188,7 @@ def apply(file: str, deck: str, workspace: str = None) -> str:
         DeckLimitError,
         DeckSyntaxError,
         VersionConflictError,
+        format_error,
         validate_path,
     )
 
@@ -152,7 +198,7 @@ def apply(file: str, deck: str, workspace: str = None) -> str:
     try:
         deck_obj = parse_deck(deck)
     except DeckSyntaxError as exc:
-        return f"ERROR: {exc}"
+        return format_error(exc)
 
     captured = io.StringIO()
     old_stdout = sys.stdout
@@ -160,12 +206,18 @@ def apply(file: str, deck: str, workspace: str = None) -> str:
 
     try:
         result = apply_impl(file_path, deck_obj, root)
-    except (VersionConflictError, AddressError, DeckLimitError, AccessDeniedError) as exc:
+    except (
+        DeckSyntaxError,
+        VersionConflictError,
+        AddressError,
+        DeckLimitError,
+        AccessDeniedError,
+    ) as exc:
         sys.stdout = old_stdout
-        return f"ERROR: {exc}"
+        return format_error(exc)
     except Exception as exc:
         sys.stdout = old_stdout
-        return f"ERROR: unexpected error — {exc}"
+        return format_error(exc, hint="internal error — this should not happen. Check the deck and retry.")
     finally:
         sys.stdout = old_stdout
 

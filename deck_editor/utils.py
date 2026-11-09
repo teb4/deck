@@ -24,8 +24,14 @@ def compute_xxhash(file_path: str) -> str:
 
 
 def compute_content_hash(content: str) -> str:
-    """Вычисляет xxhash64 от строкового содержимого."""
-    return xxhash.xxh64(content).hexdigest()
+    """Вычисляет xxhash64 от строкового содержимого.
+
+    Строку обязательно кодируем в bytes: C-расширение xxhash начиная с 4.x
+    принимает только bytes и падает на str с ошибкой
+    "Strings must be encoded before hashing" (из-за этого падали все операции
+    записи). Кодировка utf-8 — чтобы хэш совпадал на любых данных.
+    """
+    return xxhash.xxh64(content.encode("utf-8")).hexdigest()
 
 
 def validate_path(file_path: str, workspace_root: str) -> str:

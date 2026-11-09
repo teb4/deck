@@ -19,6 +19,8 @@ dependencies = [
 deck-editor = "deck_editor.__main__:main"
 deck-editor-mcp = "deck_editor.mcp_server:main"
 
+[project.optional-dependencies]
+test = ["pytest>=7"]
 
 
 [tool.setuptools.packages.find]
@@ -26,3 +28,6 @@ include = ["deck_editor*"]
 
 [tool.setuptools.package-data]
 deck_editor = ["config.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

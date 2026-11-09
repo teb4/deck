@@ -86,9 +86,16 @@ def get_lines(file_path: str, addr_str: str) -> Tuple[str, str, int]:
             f"address out of file range (lines: 1-{len(lines)})",
             hint=f"line {address.start} is outside the file, which has {len(lines)} line(s) (1-{len(lines)}).")
 
-    # Определяем конечную строку
-    if address.end is None:
+    # Определяем конечную строку.
+    # N- (is_to_end) — до конца файла; одиночный N (end is None, но НЕ is_to_end)
+    # — ровно одна строка; N-M — до строки M. Раньше N и N- обрабатывались
+    # одинаково (обе имели end is None) и читались «до конца», что ломало
+    # семантику одиночной строки по документации
+    # (README.md Addressing: `N` = Single line).
+    if address.is_to_end:
         end_idx = len(lines)
+    elif address.end is None:
+        end_idx = address.start
     else:
         end_idx = min(address.end, len(lines))
 

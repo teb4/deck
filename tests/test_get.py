@@ -32,7 +32,54 @@ class TestGetLines:
 
         try:
             rev, output, total = get_lines(path, "2")
+            # Одиначный адрес N — это «single line» (см. README.md Addressing):
+            # должен вернуться РОВНО один номер строки — запрашиваемая строка.
             assert "000002:строка 2" in output
+            assert "000001" not in output
+            assert "000003" not in output
+        finally:
+            os.unlink(path)
+
+    def test_get_single_line_first(self):
+        """N на первой строке возвращает только первую строку, а не весь файл."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("строка 1\nстрока 2\nстрока 3\n")
+            path = f.name
+
+        try:
+            rev, output, total = get_lines(path, "1")
+            assert "000001:строка 1" in output
+            assert "000002" not in output
+            assert "000003" not in output
+        finally:
+            os.unlink(path)
+
+    def test_get_single_line_last(self):
+        """N на последней строке возвращает только последнюю строку."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("строка 1\nстрока 2\nстрока 3\n")
+            path = f.name
+
+        try:
+            rev, output, total = get_lines(path, "3")
+            assert "000003:строка 3" in output
+            assert "000001" not in output
+            assert "000002" not in output
+        finally:
+            os.unlink(path)
+
+    def test_get_single_line_vs_to_end(self):
+        """Одиначный N и N- должны отличаться: N — одна строка, N- — до конца."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("строка 1\nстрока 2\nстрока 3\n")
+            path = f.name
+
+        try:
+            _, single, _ = get_lines(path, "2")
+            _, to_end, _ = get_lines(path, "2-")
+            assert "000002:строка 2" in single
+            assert "000003" not in single          # N — одна строка
+            assert "000003:строка 3" in to_end      # N- — до конца
         finally:
             os.unlink(path)
 
